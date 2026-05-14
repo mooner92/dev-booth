@@ -1,0 +1,14 @@
+{"t":0,"agent":"a85d6e0","agent_type":"planner","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a85d6e0","agent_type":"planner","event":"agent_stop","success":true,"duration_ms":330442}
+{"t":0,"agent":"a95c28f","agent_type":"architect","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a95c28f","agent_type":"architect","event":"agent_stop","success":true,"duration_ms":113734}
+{"t":0,"agent":"ae40675","agent_type":"critic","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"ae40675","agent_type":"critic","event":"agent_stop","success":true,"duration_ms":92124}
+{"t":0,"agent":"a9fca34","agent_type":"planner","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a9fca34","agent_type":"planner","event":"agent_stop","success":true,"duration_ms":402575}
+{"t":0,"agent":"a0eb02c","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"af60c63","agent_type":"architect","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"af60c63","agent_type":"architect","event":"agent_stop","success":true,"duration_ms":134905}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:ai-slop-cleaner"}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:cancel"}
+{"t":0,"agent":"a27f5a6","agent_type":"unknown","event":"agent_stop","success":true}

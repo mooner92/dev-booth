@@ -1,0 +1,19 @@
+# Backend
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+.coverage
+htmlcov/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/out.previous/
+frontend/*.tsbuildinfo
+
+# Editor / OS
+.DS_Store
+*.swp

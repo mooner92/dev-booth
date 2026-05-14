@@ -1,0 +1,7 @@
+{
+  "tool_name": "Read",
+  "tool_input_preview": "{\"file_path\":\"/home/mooner92/.claude/projects/-dev-booth/26e49853-8727-43ad-9324-6b2ddf0a27c1/tool-results/toolu_016XDgKbWMiwEaWcJByhgBWi.json\",\"limit\":10}",
+  "error": "File content (35658 tokens) exceeds maximum allowed tokens (25000). Use offset and limit parameters to read specific portions of the file, or search for specific content instead of reading the whole file.",
+  "timestamp": "2026-05-14T03:00:34.340Z",
+  "retry_count": 1
+}

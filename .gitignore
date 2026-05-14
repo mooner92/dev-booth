@@ -1,0 +1,13 @@
+env/
+config/.env
+sessions/
+__pycache__/
+*.pyc
+.pytest_cache/
+dashboard/frontend/node_modules/
+dashboard/frontend/out/
+dashboard/frontend/.next/
+*.log
+.env
+agent-working-group/
+agent-working-group/

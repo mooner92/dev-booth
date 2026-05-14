@@ -1,0 +1,21 @@
+# Add this stanza to your existing cloudflared config (typically
+#   /etc/cloudflared/config.yml or ~/.cloudflared/config.yml).
+#
+# Then:
+#   sudo systemctl restart cloudflared
+#   cloudflared tunnel route dns <tunnel-name> dashboard.excusa.uk
+#
+# Cloudflare Access policy must be applied to dashboard.excusa.uk to
+# enforce identity (see cloudflare-access-policy.md).
+
+ingress:
+  - hostname: dashboard.excusa.uk
+    service: http://127.0.0.1:7000
+    originRequest:
+      noTLSVerify: false
+      httpHostHeader: dashboard.excusa.uk
+      connectTimeout: 10s
+      keepAliveTimeout: 90s
+      noHappyEyeballs: false
+  # Existing rules go here ...
+  - service: http_status:404

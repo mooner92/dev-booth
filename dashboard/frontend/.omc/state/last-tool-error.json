@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"pkill -f \\\"uvicorn dashboard.backend.main:app\\\" 2>&1 || true; sleep 1; echo 'killed'\",\"description\":\"Stop existing uvicorn\"}",
+  "error": "Exit code 144",
+  "timestamp": "2026-05-14T04:01:48.229Z",
+  "retry_count": 1
+}

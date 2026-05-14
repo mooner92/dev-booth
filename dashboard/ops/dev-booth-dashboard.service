@@ -1,0 +1,45 @@
+[Unit]
+Description=Dev-Booth Dashboard (FastAPI + Next.js static export)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=devbooth
+Group=devbooth
+WorkingDirectory=/dev-booth/dashboard/backend
+
+Environment="PYTHONPATH=/dev-booth"
+Environment="PATH=/dev-booth/env/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="DASHBOARD_STATIC_DIR=/dev-booth/dashboard/frontend/out"
+Environment="PROMETHEUS_URL=http://localhost:9090"
+Environment="DEVBOOTH_SESSIONS_ROOT=/dev-booth/sessions"
+Environment="PYTHONUNBUFFERED=1"
+
+# Pre-flight checks: ensure port is free, fall back to prior build if needed.
+ExecStartPre=/usr/bin/bash -lc 'ss -tlnp | grep -q ":7000 " && exit 1 || exit 0'
+ExecStartPre=/usr/bin/bash -lc 'test -f "$DASHBOARD_STATIC_DIR/index.html" -a -f "$DASHBOARD_STATIC_DIR/session/_/index.html" || (test -f /dev-booth/dashboard/frontend/out.previous/index.html -a -f /dev-booth/dashboard/frontend/out.previous/session/_/index.html && cp -a /dev-booth/dashboard/frontend/out.previous "$DASHBOARD_STATIC_DIR") || exit 1'
+
+ExecStart=/dev-booth/env/bin/uvicorn dashboard.backend.main:app \
+    --host 127.0.0.1 --port 7000 \
+    --workers 1 --proxy-headers
+
+Restart=on-failure
+RestartSec=3
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/dev-booth/dashboard /dev-booth/env
+ReadWritePaths=/dev-booth/sessions
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

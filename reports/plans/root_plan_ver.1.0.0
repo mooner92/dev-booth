@@ -1,0 +1,376 @@
+# Dev-Booth 실시간 대시보드 개발
+
+## 프로젝트 배경
+
+나는 data05lx 서버(Ubuntu 24.04, NVIDIA A40 × 2)에서 AI 에이전트 3개가
+자율적으로 GitHub 레포지토리를 분석하고 코드를 개선하는 "Dev-Booth" 시스템을 운영하고 있다.
+
+에이전트 구성:
+
+- OpenClaw: 오케스트레이터 (작업 분배, PR 검토, 커밋 승인)
+- Hermes-A: 분석/설계 (코드 구조 분석, 아키텍처 설계)
+- Hermes-B: 구현/코딩 (실제 코드 작성, 테스트, 버그 수정)
+
+에이전트들은 Hermes Agent(NousResearch) 프레임워크 + Qwen2.5-Coder-14B(vLLM localhost:8003)로 동작한다.
+에이전트 간 통신은 agent-working-group(파일 기반 메시지 큐)을 사용한다.
+서버 방화벽이 Discord/Telegram 등 외부 메시징을 모두 차단해서
+모니터링은 내부 웹 대시보드 + Cloudflare Tunnel([dashboard.excusa.uk](http://dashboard.excusa.uk/))로만 한다.
+
+## 현재 인프라
+
+서버: 192.168.1.105 (data05lx)
+포트:
+8000 - vLLM Qwen3-Coder-Next FP8
+8003 - vLLM Qwen2.5-Coder-14B (Dev-Booth용)
+8080 - OpenWebUI
+3000 - Grafana
+9090 - Prometheus (GPU/CPU 메트릭)
+7000 - Dev-Booth 대시보드 (새로 만들 것)
+
+파일 구조:
+/dev-booth/
+├── env/                    Python 3.11 venv
+├── config/.env
+├── core/
+│   ├── [llm.py](http://llm.py/)
+│   └── [orchestrator.py](http://orchestrator.py/)
+├── sessions/
+│   └── {session-name}/
+│       ├── project/          Git 레포 클론
+│       ├── messages.jsonl    에이전트 대화 로그
+│       ├── status.json       세션 상태
+│       ├── analysis_hermes_a.md
+│       ├── analysis_hermes_b.md
+│       ├── summary_v1.0.0.md
+│       └── improvements_v0.0.1.md
+└── dashboard/              여기에 새로 만들 것
+
+## 만들어야 할 것
+
+/dev-booth/dashboard/ 경로에 풀스택 웹 대시보드를 만든다.
+포트 7000에서 실행하며 Cloudflare Tunnel을 통해 dashboard.excusa.uk에 노출된다.
+
+## 기술 스택
+
+Backend:
+
+- FastAPI (Python 3.11, /dev-booth/env venv 사용)
+- WebSocket (실시간 로그 스트리밍)
+- watchfiles (messages.jsonl 파일 변경 감지)
+- httpx (Prometheus API 프록시)
+
+Frontend:
+
+- Next.js 14 (App Router) + TypeScript
+- pnpm 패키지 매니저
+- Tailwind CSS
+- shadcn/ui ([https://ui.shadcn.com](https://ui.shadcn.com/)) - 메인 컴포넌트 라이브러리
+- lucide-react (아이콘)
+- recharts (메트릭 차트)
+- @monaco-editor/react (코드 뷰어)
+- react-markdown + react-syntax-highlighter (마크다운/코드 렌더링)
+- date-fns (시간 포맷)
+- sonner (토스트 알림)
+
+## 디자인 원칙: 당근마켓 Seed Design
+
+반드시 [https://seed-design.io](https://seed-design.io/) 의 디자인 원칙을 따른다.
+shadcn/ui 컴포넌트를 기반으로 하되 Seed Design 토큰으로 커스터마이징:
+
+컬러 시스템:
+Primary:    #FF6F0F (당근 오렌지) - 주요 액션, 강조
+Primary bg: #FFF4EE
+Success:    #00B493
+Error:      #FF4136
+Warning:    #FF9800
+Neutral:    #FFFFFF / #F9FAFB / #F4F4F4 / #E5E8EB / #ADB1BA / #6B7280
+Text:       #1A1C1E (primary) / #4D5159 (secondary) / #ADB1BA (disabled)
+
+타이포그래피:
+폰트: Pretendard (Google Fonts 또는 CDN)
+크기: 12/14/16/18/20/24/28/32px
+굵기: 400(regular) / 500(medium) / 600(semibold) / 700(bold)
+
+컴포넌트 원칙:
+border-radius: 8px (small), 12px (medium), 16px (large), 999px (pill)
+shadow: 부드러운 그림자 (0 1px 3px rgba(0,0,0,0.08))
+간격: 4px 기반 그리드 (4/8/12/16/20/24/32/48px)
+다크모드: 시스템 설정 자동 감지 (class strategy)
+모바일 반응형: 필수
+
+에이전트별 색상:
+OpenClaw:  #FF4136 (빨강) - 오케스트레이터
+Hermes-A:  #0070F3 (파랑) - 분석/설계
+Hermes-B:  #00B493 (초록) - 구현/코딩
+System:    #6B7280 (회색) - 시스템 메시지
+
+## 페이지 구조
+
+### 1. 메인 대시보드 (/)
+
+레이아웃:
+
+- 상단 헤더 고정 (높이 64px)
+좌: "Dev-Booth" 로고 (오렌지 아이콘)
+중: 활성 세션 수 배지
+우: GPU 사용률 인디케이터, vLLM 상태 dot, 다크모드 토글
+- 메인 콘텐츠 영역
+
+상태 카드 행 (4개):
+
+- 활성 세션 수
+- GPU 사용률 (평균)
+- vLLM 상태 (온라인/오프라인)
+- 오늘 완료된 커밋 수
+
+세션 카드 그리드:
+각 세션마다 shadcn Card 컴포넌트로 표시
+카드 내용:
+- 세션명 (bold)
+- 레포지토리 (링크, 작은 텍스트)
+- 현재 단계 뱃지 (분석중/설계중/개발중/커밋검토/PR완료)
+- 현재 담당 에이전트 (색상 dot + 이름)
+- 마지막 활동 시간 (상대시간: "3분 전")
+- 진행률 바 (shadcn Progress, 시나리오 1~12단계)
+- 카드 클릭 → 세션 상세 페이지
+
+빈 상태:
+세션 없을 때 예쁜 빈 상태 화면
+아이콘 + "아직 실행 중인 세션이 없습니다" 텍스트
+
+### 2. 세션 상세 페이지 (/session/[name])
+
+레이아웃: 3컬럼 (좌 사이드바 280px + 중앙 채팅 + 우 사이드바 320px)
+모바일: 탭으로 전환
+
+좌측 사이드바 - 파일 탐색기:
+
+- 세션 정보 요약 (레포명, 브랜치, 시작시간)
+- 단계 진행 표시 (shadcn Progress + 현재 단계명)
+- 파일 트리 (/dev-booth/sessions/{name}/project/)
+    - 폴더 토글 가능
+    - 파일 클릭 시 중앙 패널에서 뷰어 열기
+    - 최근 수정된 파일 하이라이트 (노란 dot)
+    - 새로 생성된 파일 하이라이트 (초록 dot)
+- 문서 탭:
+summary_v1.0.0.md, improvements_v0.0.1.md
+analysis_hermes_a.md, analysis_hermes_b.md
+(클릭 시 마크다운 렌더링으로 뷰어 열기)
+
+중앙 - 대화 로그 패널 (Discord 스타일):
+상단 고정: 세션명 + 현재 에이전트 상태
+
+메시지 목록 (가상화 스크롤, react-virtual 사용):
+각 메시지:
+- 에이전트 아바타 (색상 원형 + 이니셜: OC/HA/HB)
+- 에이전트 이름 (색상)
+- 타임스탬프 (hover 시 절대시간 툴팁)
+- 메시지 내용 (마크다운 렌더링)
+- 코드블록: syntax highlight + 언어 배지 + 복사 버튼
+- tool call 표시: 🔧 아이콘 + 툴 이름 + 결과 (접기/펼치기)
+
+타이핑 인디케이터:
+현재 처리 중인 에이전트 있으면 하단에 표시
+"Hermes-A가 분석 중..." + 애니메이션 점
+
+자동 스크롤: 새 메시지 오면 하단으로 (사용자가 위로 스크롤 중이면 고정)
+
+하단: 로그 검색 입력창 (Cmd+F)
+
+우측 사이드바 - 상태 & 모니터링:
+
+Git 상태 패널:
+- 현재 브랜치
+- 마지막 커밋 (해시 + 메시지)
+- 변경된 파일 수
+- 테스트 결과 (통과 N / 실패 N)
+
+리소스 모니터링 (Prometheus 연동):
+5초 자동 갱신, recharts로 시각화
+- GPU 0/1 사용률 (%) - 미니 라인차트
+- GPU 0/1 메모리 (GB used / total)
+- GPU 온도 (°C)
+- vLLM 처리 요청 수 (localhost:8003/metrics)
+- CPU 사용률
+- RAM 사용률
+
+AWG 메시지 큐 상태:
+- OpenClaw inbox/processing
+- Hermes-A inbox/processing
+- Hermes-B inbox/processing
+
+### 3. 파일 뷰어 (모달 또는 슬라이드 패널)
+
+- 코드 파일: Monaco Editor (읽기 전용, 언어 자동 감지)
+- 마크다운: react-markdown 렌더링
+- JSON: 포맷된 JSON 뷰어
+- 상단: 파일 경로 breadcrumb + 복사 버튼
+
+## 백엔드 API 명세
+
+FastAPI 서버 (포트 7000):
+
+REST:
+GET  /api/sessions                  세션 목록
+GET  /api/sessions/{name}           세션 상세
+GET  /api/sessions/{name}/logs      대화 로그 (limit, offset)
+GET  /api/sessions/{name}/files     파일 트리
+GET  /api/sessions/{name}/file?path= 파일 내용
+GET  /api/sessions/{name}/status    세션 상태
+GET  /api/metrics                   Prometheus 메트릭 프록시
+GET  /api/health                    헬스체크
+
+WebSocket:
+WS   /ws/{session_name}             세션 실시간 업데이트
+
+WebSocket 메시지 타입:
+{"type": "log",     "agent": "Hermes-A", "timestamp": "...", "content": "..."}
+{"type": "status",  "step": 5, "current_agent": "Hermes-B", "status": "개발중"}
+{"type": "typing",  "agent": "Hermes-A", "is_typing": true}
+{"type": "file_changed", "path": "src/lib/supabase.ts", "action": "modified"}
+{"type": "metrics", "gpu0_util": 42, "gpu1_util": 38, ...}
+
+로그 소스 (우선순위):
+
+1. /dev-booth/sessions/{name}/messages.jsonl 파일 감시 (watchfiles)
+2. /dev-booth/sessions/{name}/status.json 파일 감시
+
+messages.jsonl 포맷:
+{"time": "ISO8601", "agent": "Hermes-A", "input": "...", "output": "..."}
+
+status.json 포맷:
+{
+"session": "test-project",
+"status": "active",
+"current_step": 4,
+"current_agent": "Hermes-A",
+"repo_url": "https://github.com/mooner92/...",
+"repo_name": "firebase-chat-exp",
+"branch": "feature/task-001",
+"started_at": "ISO8601",
+"last_commit": {"hash": "abc123", "message": "feat: ..."},
+"test_results": {"passed": 12, "failed": 0}
+}
+
+AWG 메시지 큐 경로:
+/dev-booth/sessions/{name}/awg/{agent}/inbox/
+/dev-booth/sessions/{name}/awg/{agent}/processing/
+
+## 파일 구조
+
+/dev-booth/dashboard/
+├── backend/
+│   ├── [main.py](http://main.py/)
+│   ├── routers/
+│   │   ├── [sessions.py](http://sessions.py/)
+│   │   ├── [metrics.py](http://metrics.py/)
+│   │   └── [ws.py](http://ws.py/)
+│   ├── services/
+│   │   ├── session_service.py
+│   │   ├── metrics_service.py
+│   │   └── file_watcher.py
+│   └── requirements.txt
+└── frontend/
+├── app/
+│   ├── page.tsx
+│   ├── session/[name]/page.tsx
+│   ├── layout.tsx
+│   └── globals.css
+├── components/
+│   ├── ui/              (shadcn 자동 생성)
+│   ├── AgentMessage.tsx
+│   ├── AgentAvatar.tsx
+│   ├── SessionCard.tsx
+│   ├── FileTree.tsx
+│   ├── FileViewer.tsx
+│   ├── MetricsPanel.tsx
+│   ├── TypingIndicator.tsx
+│   ├── GitStatus.tsx
+│   └── AWGStatus.tsx
+├── lib/
+│   ├── api.ts
+│   ├── websocket.ts
+│   └── utils.ts
+├── hooks/
+│   ├── useSession.ts
+│   ├── useMetrics.ts
+│   └── useWebSocket.ts
+├── types/
+│   └── index.ts
+├── package.json
+├── tailwind.config.ts
+└── next.config.ts
+
+## systemd 서비스
+
+/etc/systemd/system/dev-booth-dashboard.service:
+
+[Unit]
+Description=Dev-Booth Dashboard Backend
+After=network.target
+
+[Service]
+Type=simple
+User=mooner92
+WorkingDirectory=/dev-booth/dashboard/backend
+Environment="PATH=/dev-booth/env/bin:/usr/local/bin:/usr/bin"
+ExecStart=/dev-booth/env/bin/uvicorn main:app --host 0.0.0.0 --port 7000 --reload
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+
+Next.js는 개발 중에는 npm run dev (포트 3001),
+프로덕션에서는 빌드 후 next start (포트 3001)로 실행.
+FastAPI가 /api/* 요청 처리, 나머지는 Next.js로 프록시.
+또는 Next.js를 포트 7000에서 직접 실행하고 API는 /api/ route handler로 구현해도 됨.
+(어떤 방식이 더 나은지 판단해서 결정해줘)
+
+## 추가 요구사항
+
+성능:
+
+- 페이지 초기 로딩 2초 이내
+- WebSocket 메시지 500ms 이내 반영
+- 로그 1000개 이상 부드럽게 (react-virtual 가상화)
+
+UX:
+
+- 세션 없을 때 예쁜 빈 상태 (일러스트 또는 아이콘)
+- 에이전트 작업 중 skeleton loader
+- 에러 상태 명확히 표시 (sonner 토스트)
+- 타임스탬프 hover → 절대시간/상대시간 토글
+- 코드블록 복사 버튼 (복사 완료 피드백)
+- 대화 로그 Cmd+F 검색
+- 새 메시지 알림 (페이지 타이틀 변경)
+- 키보드 단축키: ESC로 파일뷰어 닫기
+
+보안:
+
+- CORS: localhost만 허용
+- 인증 불필요 (Cloudflare Access에서 처리)
+- 파일 접근: /dev-booth/sessions/ 경로 외 접근 차단
+
+현재 테스트 데이터:
+/dev-booth/sessions/test-project/ 에 실제 데이터 있음
+개발 중 이 데이터로 바로 테스트 가능
+
+## 개발 순서
+
+1. 백엔드 FastAPI 먼저
+    - [main.py](http://main.py/) + 기본 라우터
+    - [sessions.py](http://sessions.py/) (파일 읽기)
+    - [ws.py](http://ws.py/) (WebSocket + watchfiles)
+    - [metrics.py](http://metrics.py/) (Prometheus 프록시)
+    - 테스트: curl http://localhost:7000/api/sessions
+2. 프론트엔드 Next.js
+    - shadcn/ui 초기화 (npx shadcn@latest init)
+    - 필요한 컴포넌트 추가
+    - 메인 대시보드 페이지
+    - 세션 상세 페이지
+    - WebSocket 연결
+3. 통합 테스트
+    - 실제 세션 데이터로 확인
+    - WebSocket 실시간 동작 확인
+4. systemd 서비스 등록
