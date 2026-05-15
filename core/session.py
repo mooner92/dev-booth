@@ -78,6 +78,7 @@ class DevBoothSession:
             "repo_url": self.repo_url,
             "goal": self.goal,
             "session": self.session_name,
+            "session_path": str(self.session_path),  # v5: bodies hard-code absolute artifact paths
             "n": 1,
             "task_description": "initial implementation",
         }

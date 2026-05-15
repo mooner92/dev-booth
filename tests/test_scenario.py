@@ -63,19 +63,23 @@ def test_review_gate_flag_set_on_review_stage():
 
 def test_format_task_renders_without_keyerror():
     # a missing template var would raise KeyError here; that's the real check.
+    # v5: session_path is part of the ctx core/session.py builds — bodies use
+    # it for absolute artifact paths (Problem 2 fix).
     ctx = dict(repo="acme", repo_url="https://github.com/x/acme", goal="g",
-               session="sess", n=1, task_description="impl")
+               session="sess", session_path="/dev-booth/sessions/sess",
+               n=1, task_description="impl")
     for s in STAGE_DAG:
         params = format_task(s, **ctx)
         # title only templates {repo} — must be fully resolved
         assert params["title"] and "{repo}" not in params["title"]
         assert params["assignee"] in ALLOWED_ASSIGNEES
         assert params["workspace"] == "worktree"
-        # body must be non-empty and carry no unresolved {repo}/{goal}/{session} tokens
+        # body must be non-empty and carry no unresolved tokens
         # (literal JSON braces from {{...}} are fine — they are intended output)
         body = params["body"]
         assert body
-        for tok in ("{repo}", "{repo_url}", "{goal}", "{session}", "{n}", "{task_description}"):
+        for tok in ("{repo}", "{repo_url}", "{goal}", "{session}",
+                    "{session_path}", "{n}", "{task_description}"):
             assert tok not in body, f"unresolved {tok} in stage {s.stage} body"
 
 
