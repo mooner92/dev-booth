@@ -16,7 +16,7 @@ import re
 
 import pytest
 
-from core.scenario import STAGE_DAG, format_task, ALLOWED_ASSIGNEES
+from core.scenario import STAGE_DAG, SKILL_USE_CASES, format_task, ALLOWED_ASSIGNEES
 
 
 CTX = {
@@ -85,3 +85,34 @@ def test_dag_has_twelve_stages():
     """Sanity: the v5 work is shaped against the 12-stage scenario."""
     stages = sorted(s.stage for s in STAGE_DAG)
     assert stages == list(range(1, 13)), f"DAG must be 1..12, got {stages}"
+
+
+def test_every_stage_skills_known():
+    """Every skill name used in any stage has an entry in SKILL_USE_CASES."""
+    for s in STAGE_DAG:
+        for skill in s.skills:
+            assert skill in SKILL_USE_CASES, (
+                f"stage {s.stage}: '{skill}' missing from SKILL_USE_CASES"
+            )
+
+
+@pytest.mark.parametrize("stage", [s for s in STAGE_DAG if s.skills], ids=lambda s: f"stage-{s.stage}")
+def test_body_has_skills_section_when_assigned(stage):
+    """Every stage with non-empty skills renders the section + every named skill."""
+    body = format_task(stage, **CTX)["body"]
+    assert "## 활용 가능한 스킬" in body, f"stage {stage.stage} missing skills section"
+    for skill in stage.skills:
+        assert skill in body, f"stage {stage.stage} skills section missing '{skill}'"
+
+
+def test_body_omits_skills_section_when_empty():
+    """A synthetic stage with skills=[] does NOT render the section header (no blank heading)."""
+    from core.scenario import StageTask
+    synthetic = StageTask(
+        stage=99, title="x", assignee="conductor",
+        workspace="worktree", tag="orchestration",
+        body_template="## 작업\nnoop\n\n## 환경 정보\n- none\n",
+        skills=[],
+    )
+    body = format_task(synthetic, **CTX)["body"]
+    assert "## 활용 가능한 스킬" not in body
