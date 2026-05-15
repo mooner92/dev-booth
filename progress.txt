@@ -1,46 +1,23 @@
-# Dev-Booth Hermes Agent Enhancement v9 — Ralph progress
-
-## Plan
-in-prompt (no plan file in reports/plans for v9 — direct ralph run)
+# Dev-Booth Dashboard v10 UX — Ralph progress
 
 ## Inheritance
-Builds on v8 dashboard redesign (commits c31974a → 3193161, all local).
+Builds on v9 agent enhancement (commits 9b869b2 → 10378ba, all local).
 
 ## Phase 0 — probes (DONE)
-- RTK 0.40.0 at ~/.local/bin/rtk; rtk-hermes 1.2.3 pip-installed in the Hermes venv.
-- rtk-hermes registers `[hermes_agent.plugins].rtk-rewrite=rtk_hermes` (entry-point match).
-- config.yaml had **3 duplicate `plugins:` blocks** at lines 536/540/544 — Phase 1 fix.
-- `hermes plugins list` only surfaces bundled plugins on v0.13.0 (pip-entry-point plugins load at runtime via `_scan_entry_points`).
-- All 3 profiles had NO MEMORY.md and NO devbooth-* skills — greenfield install.
-- firebase-003: 8 todo / 1 blocked / 3 done — operator unblock TODO.
+- ChatStream uses fixed-height virtualizer (80px); long messages overlap.
+- Backend has GET endpoints only — no POST for new sessions.
+- Main page page.tsx has stat cards + session list; no search/filter/new-session.
+- gh auth: CrownClownCrowd is logged in ✓ (Active account).
+- pytest baseline 153.
 
-## Phase 1 — RTK plugin (DONE; live config only, no repo artifact)
-- config.yaml deduplicated to ONE plugins: block; backup at /tmp/v9-backup/hermes-config.yaml.
-- Python entry-point check confirms rtk-rewrite is discoverable.
-- Activation = `sudo systemctl restart hermes-gateway` (operator TODO).
+## Workers
+- Worker A (backend) — DONE — 158 pytest (+5 new tests). Commit 7f46c3f→<next>.
+  - POST /api/sessions/start (slug validation, BackgroundTasks subprocess seed)
+  - GET /api/github/status (gh auth status → CrownClownCrowd check)
+  - 5 tests: happy / 409 / 400 / github logged-in / github failure
+- Worker B (designer, main page + modal) — in flight.
+- Lead (ChatStream) — DONE — virtualizer dropped, plain flex map. Commit 7f46c3f.
 
-## Phase 2 — MEMORY.md (DONE)
-- 3 files at ~/.hermes/profiles/<role>/MEMORY.md, sizes 1297/1392/1472 bytes (cap 2200).
-- Repo mirrors at /dev-booth/core/memories/<role>.MEMORY.md.
-
-## Phase 3 — Custom skills (DONE)
-- 3 SKILL.md files at ~/.hermes/skills/devbooth-{session-start,task-complete,context-save}/.
-- Repo mirrors at /dev-booth/core/skills/<name>/.
-- `hermes skills list` shows all 3 as `local/local/enabled`.
-
-## Phase 4 — SOUL.md update (DONE)
-- '## Dev-Booth 전용 스킬 (항상 사용)' section appended at tail of 3 core/souls + 3 ~/.hermes/profiles mirrors.
-- v5 ⚠️ + v6 팀 공지 규칙 + v7 스킬 카탈로그 sections all preserved.
-
-## Phase 5 — firebase-003 (OPERATOR TODO)
-- 1 blocked task on board. Unblock after Phase 1 activation (sudo gateway restart).
-
-## Phase 6 — verify (DONE)
-- pytest 153 passing (no backend change → no regression).
-- All evidence captured in results report.
-
-## Operator TODOs (sudo + push)
-1. sudo systemctl restart hermes-gateway
-2. Confirm rtk-rewrite activation via journalctl / one-shot probe
-3. Unblock firebase-003 blocked task
-4. DEV_BOOTH_DRYRUN=0 git push origin feat/kanban-redesign-2026-05-14
+## Commits so far
+- 7f46c3f phase1(ux10) ChatStream dynamic height
+- <next> phase2(ux10) backend POST /sessions/start + GET /github/status + tests
