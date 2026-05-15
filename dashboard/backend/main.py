@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import config
-from .routers import health, kanban, metrics, sessions, ws
+from .routers import github, health, kanban, metrics, sessions, ws
 from .services.prometheus_proxy import PrometheusProxy
 from .services.session_hub import HubRegistry
 from .services.session_registry import SessionListCache
@@ -48,6 +48,7 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(sessions.router)
+app.include_router(github.router)
 app.include_router(metrics.router)
 app.include_router(ws.router)
 app.include_router(kanban.router)

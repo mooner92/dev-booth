@@ -1,11 +1,14 @@
-"""Session REST endpoints (read-only)."""
+"""Session REST endpoints."""
 from __future__ import annotations
 
+import os
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
+from pydantic import BaseModel
 
 from .. import config
 from ..services import awg_inspector, session_layout, session_registry
@@ -24,6 +27,42 @@ from ..services.path_guard import safe_session_path
 from ..services.stage_mapper import StageTracker
 
 router = APIRouter(prefix="/api", tags=["sessions"])
+
+
+class SessionStartRequest(BaseModel):
+    session_name: str
+    repo_url: str
+    goal: str = "코드 품질 개선 및 버그 수정"
+    mode: Literal["dryrun", "live"] = "dryrun"
+
+
+def _run_session_seed(session_name: str, repo_url: str, goal: str, dryrun: bool) -> None:
+    env = os.environ.copy()
+    env["DEV_BOOTH_DRYRUN"] = "1" if dryrun else "0"
+    try:
+        subprocess.run(
+            ["/dev-booth/env/bin/python3", "-m", "core.session",
+             session_name, repo_url, "--goal", goal],
+            cwd="/dev-booth", env=env, timeout=300, capture_output=True, check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        pass  # best-effort; UI will see the session dir appear if seed succeeded
+
+
+@router.post("/sessions/start")
+async def start_session(
+    body: SessionStartRequest, background_tasks: BackgroundTasks, request: Request
+) -> dict:
+    slug = body.session_name.strip().lower().replace(" ", "-").replace("_", "-")
+    if not slug or not slug.replace("-", "").isalnum():
+        raise HTTPException(400, "세션명은 영문/숫자/하이픈만 가능합니다")
+    sessions_root = Path(os.environ.get("DEVBOOTH_SESSIONS_ROOT", "/dev-booth/sessions"))
+    session_path = sessions_root / slug
+    if session_path.exists():
+        raise HTTPException(409, f"세션 '{slug}' 이미 존재합니다")
+    dryrun = body.mode != "live"
+    background_tasks.add_task(_run_session_seed, slug, body.repo_url, body.goal, dryrun)
+    return {"session_name": slug, "status": "starting"}
 
 
 def _registry(request: Request) -> session_registry.SessionListCache:
