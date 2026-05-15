@@ -54,8 +54,8 @@ async def start_session(
     body: SessionStartRequest, background_tasks: BackgroundTasks, request: Request
 ) -> dict:
     slug = body.session_name.strip().lower().replace(" ", "-").replace("_", "-")
-    if not slug or not slug.replace("-", "").isalnum():
-        raise HTTPException(400, "세션명은 영문/숫자/하이픈만 가능합니다")
+    if not slug or len(slug) > 80 or not slug.replace("-", "").isalnum():
+        raise HTTPException(400, "세션명은 영문/숫자/하이픈만 가능하며 80자 이하여야 합니다")
     sessions_root = Path(os.environ.get("DEVBOOTH_SESSIONS_ROOT", "/dev-booth/sessions"))
     session_path = sessions_root / slug
     if session_path.exists():
