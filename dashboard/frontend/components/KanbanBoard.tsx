@@ -1,172 +1,164 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { useKanban, type KanbanTask, type KanbanStats, type TaskStatus } from "@/hooks/useKanban";
-import { AGENT_COLORS, AGENT_LABELS } from "@/lib/constants";
-import { Circle } from "lucide-react";
+import { useKanban, type KanbanTask, type TaskStatus } from "@/hooks/useKanban";
+import { AGENT_COLORS } from "@/lib/constants";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 
-// KanbanBoard는 SessionDetailClient에서 selectedTaskId/onTaskSelect를 받아
-// 태스크 클릭 시 채팅 피드를 전환할 수 있게 한다.
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-// ── Status config ─────────────────────────────────────────────────────────────
+/** Strip "[repo-name] " prefix from task titles for compact sidebar display. */
+export function trimTaskTitle(title: string): string {
+  return title.replace(/^\[[^\]]+\]\s*/, "");
+}
 
-const STATUS_ORDER: TaskStatus[] = [
-  "triage",
-  "todo",
-  "ready",
-  "running",
-  "blocked",
-  "done",
-  "archived",
-];
+// ── StatusIcon ─────────────────────────────────────────────────────────────────
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  triage: "분류 중",
-  todo: "할 일",
-  ready: "준비됨",
-  running: "실행 중",
-  blocked: "차단됨",
-  done: "완료",
-  archived: "보관됨",
-};
-
-// Tailwind classes per status (badge bg + text)
-const STATUS_BADGE: Record<TaskStatus, string> = {
-  triage: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
-  todo: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
-  ready: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  running: "bg-brand-50 text-brand-700 dark:bg-brand-900 dark:text-brand-300",
-  blocked: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  done: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  archived: "bg-neutral-100 text-neutral-400 dark:bg-neutral-900 dark:text-neutral-600",
-};
-
-// ── Stats strip ───────────────────────────────────────────────────────────────
-
-function StatsStrip({ stats }: { stats: KanbanStats }) {
-  const items: { status: TaskStatus; count: number }[] = [
-    { status: "triage", count: stats.triage },
-    { status: "todo", count: stats.todo },
-    { status: "ready", count: stats.ready },
-    { status: "running", count: stats.running },
-    { status: "blocked", count: stats.blocked },
-    { status: "done", count: stats.done },
-  ];
-  return (
-    <div className="flex flex-wrap gap-2">
-      {items.map(({ status, count }) => (
-        <span
-          key={status}
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-            STATUS_BADGE[status],
-          )}
-        >
-          {STATUS_LABELS[status]}
-          <span className="font-bold">{count}</span>
+function StatusIcon({ status }: { status: TaskStatus }) {
+  switch (status) {
+    case "done":
+      return <span className="text-emerald-500">✓</span>;
+    case "running":
+      return (
+        <span className="relative inline-flex h-2 w-2">
+          <span className="absolute h-full w-full animate-ping rounded-full bg-brand opacity-75" />
+          <span className="relative h-2 w-2 rounded-full bg-brand" />
         </span>
-      ))}
-    </div>
-  );
+      );
+    case "blocked":
+      return <span className="text-amber-500">⊘</span>;
+    case "ready":
+      return <span className="text-blue-500">▶</span>;
+    default:
+      return (
+        <span className="inline-block h-2 w-2 rounded border border-muted-foreground/30" />
+      );
+  }
 }
 
-// ── Running indicator ─────────────────────────────────────────────────────────
+// ── TaskRow ────────────────────────────────────────────────────────────────────
 
-function RunningDot() {
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span className="inline-block h-2 w-2 rounded-full bg-brand animate-pulse-dot" />
-      <span className="text-xs text-brand-600 dark:text-brand-400 font-medium">에이전트 작업 중</span>
-    </span>
-  );
-}
-
-// ── Task card ─────────────────────────────────────────────────────────────────
-
-function TaskCard({
+function TaskRow({
   task,
   selected,
   onSelect,
 }: {
   task: KanbanTask;
   selected: boolean;
-  onSelect: (id: string) => void;
+  onSelect?: (id: string) => void;
 }) {
-  const agentColor = task.assignee ? (AGENT_COLORS[task.assignee] ?? "#6B7280") : "#6B7280";
-  const agentLabel = task.assignee ? (AGENT_LABELS[task.assignee] ?? task.assignee) : null;
+  const agentColor = task.assignee
+    ? (AGENT_COLORS[task.assignee] ?? "#6B7280")
+    : null;
 
   return (
     <button
       type="button"
-      onClick={() => onSelect(task.id)}
+      onClick={() => onSelect?.(task.id)}
       className={cn(
-        "w-full text-left rounded border bg-background px-3 py-2.5 shadow-card space-y-1.5 transition-colors",
-        selected
-          ? "border-brand ring-1 ring-brand/40"
-          : "border-border hover:border-muted-foreground/40",
+        "flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-muted",
+        selected && "border-l-2 border-brand bg-muted",
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-medium leading-snug text-foreground line-clamp-2">
-          {task.title}
-        </span>
+      <span className="flex w-3 shrink-0 items-center justify-center text-xs">
+        <StatusIcon status={task.status} />
+      </span>
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate text-xs leading-snug",
+          task.status === "done" && "text-muted-foreground line-through",
+          task.status === "running" && "font-medium text-foreground",
+          task.status === "blocked" && "text-amber-600 dark:text-amber-400",
+        )}
+        title={task.title}
+      >
+        {trimTaskTitle(task.title)}
+      </span>
+      {agentColor && (
         <span
-          className={cn(
-            "shrink-0 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium",
-            STATUS_BADGE[task.status],
-          )}
-        >
-          {STATUS_LABELS[task.status]}
-        </span>
-      </div>
-      {task.status === "running" && <RunningDot />}
-      {agentLabel && (
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Circle className="h-2 w-2 fill-current" style={{ color: agentColor }} />
-          {agentLabel}
-        </div>
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: agentColor }}
+        />
       )}
     </button>
   );
 }
 
-// ── Column ────────────────────────────────────────────────────────────────────
+// ── GpuSummary ────────────────────────────────────────────────────────────────
+// Mirrors MonitoringPane's api.getMetricsPreset pattern with a 5s polling loop.
 
-function Column({
-  status,
-  tasks,
-  selectedTaskId,
-  onTaskSelect,
-}: {
-  status: TaskStatus;
-  tasks: KanbanTask[];
-  selectedTaskId?: string;
-  onTaskSelect: (id: string) => void;
-}) {
-  if (tasks.length === 0) return null;
+function GpuSummary() {
+  const [util, setUtil] = useState<number | null>(null);
+  const [memMiB, setMem] = useState<number | null>(null);
+  const [tempC, setTemp] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function tick() {
+      try {
+        const [u, m, t] = await Promise.all([
+          api.getMetricsPreset("gpu_utilization").catch(() => null),
+          api.getMetricsPreset("gpu_memory_used").catch(() => null),
+          api.getMetricsPreset("gpu_temperature").catch(() => null),
+        ]);
+        if (cancelled) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const v = (snap: any) =>
+          snap?.available
+            ? (Object.values(snap.series)[0] as { points: [number, number][] } | undefined)
+                ?.points[0]?.[1] ?? null
+            : null;
+        setUtil(v(u));
+        setMem(v(m));
+        setTemp(v(t));
+      } catch {
+        /* swallow — GPU panel is best-effort */
+      }
+    }
+
+    tick();
+    const id = window.setInterval(tick, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  if (util === null && memMiB === null && tempC === null) return null;
+
+  const utilColor = (util ?? 0) > 80 ? "text-red-500" : "text-emerald-500";
+  const tempColor = (tempC ?? 0) > 80 ? "text-red-500" : "text-foreground";
+
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-1.5">
-        <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", STATUS_BADGE[status])}>
-          {STATUS_LABELS[status]}
+    <div className="shrink-0 space-y-1 border-t border-border px-3 py-2">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        GPU
+      </p>
+      <div className="flex justify-between text-xs">
+        <span className="text-muted-foreground">사용률</span>
+        <span className={cn("font-mono", utilColor)}>
+          {util != null ? `${util.toFixed(0)}%` : "—"}
         </span>
-        <span className="text-xs text-muted-foreground">{tasks.length}</span>
       </div>
-      <div className="space-y-2 pr-0.5">
-        {tasks.map((task) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            selected={task.id === selectedTaskId}
-            onSelect={onTaskSelect}
-          />
-        ))}
+      <div className="flex justify-between text-xs">
+        <span className="text-muted-foreground">메모리</span>
+        <span className="font-mono text-foreground">
+          {memMiB != null ? `${Math.round(memMiB)} MiB` : "—"}
+        </span>
+      </div>
+      <div className="flex justify-between text-xs">
+        <span className="text-muted-foreground">온도</span>
+        <span className={cn("font-mono", tempColor)}>
+          {tempC != null ? `${tempC.toFixed(0)}°C` : "—"}
+        </span>
       </div>
     </div>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── KanbanBoard ───────────────────────────────────────────────────────────────
 
 export function KanbanBoard({
   boardSlug,
@@ -179,42 +171,58 @@ export function KanbanBoard({
 }) {
   const { tasks, stats, connected } = useKanban(boardSlug);
 
-  const grouped = STATUS_ORDER.reduce<Record<TaskStatus, KanbanTask[]>>(
-    (acc, status) => {
-      acc[status] = tasks.filter((t) => t.status === status);
-      return acc;
-    },
-    {} as Record<TaskStatus, KanbanTask[]>,
+  const sorted = [...tasks].sort(
+    (a, b) => (a.created_at ?? 0) - (b.created_at ?? 0),
   );
+  const doneCount = sorted.filter((t) => t.status === "done").length;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex h-full min-h-0 flex-col bg-card">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-foreground">Kanban 보드</h2>
-        <div className="flex items-center gap-2">
-          {stats && <StatsStrip stats={stats} />}
-          <span className={cn("h-2 w-2 rounded-full", connected ? "bg-seed-success" : "bg-neutral-300")} />
-          <span className="text-xs text-muted-foreground">{connected ? "실시간" : "연결 중"}</span>
+      <div className="shrink-0 border-b border-border px-3 py-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Kanban
+          </h2>
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              connected ? "bg-emerald-500" : "bg-neutral-300",
+            )}
+            title={connected ? "WS connected" : "WS reconnecting"}
+          />
         </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          완료 {doneCount} / 전체 {sorted.length}
+          {stats && (
+            <span className="ml-2 text-[10px]">
+              · 실행 {stats.running}
+              {stats.blocked > 0 && ` · 차단 ${stats.blocked}`}
+            </span>
+          )}
+        </p>
       </div>
 
-      {/* Task columns — stacked vertically to fit a sidebar panel */}
-      {tasks.length === 0 ? (
-        <p className="text-xs text-muted-foreground">작업이 없습니다.</p>
-      ) : (
-        <div className="space-y-4">
-          {STATUS_ORDER.map((status) => (
-            <Column
-              key={status}
-              status={status}
-              tasks={grouped[status]}
-              selectedTaskId={selectedTaskId}
-              onTaskSelect={onTaskSelect ?? (() => {})}
+      {/* Task list */}
+      <div className="min-h-0 flex-1 overflow-y-auto py-1">
+        {sorted.length === 0 ? (
+          <p className="px-3 py-2 text-xs text-muted-foreground">
+            작업이 없습니다.
+          </p>
+        ) : (
+          sorted.map((t) => (
+            <TaskRow
+              key={t.id}
+              task={t}
+              selected={t.id === selectedTaskId}
+              onSelect={onTaskSelect}
             />
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
+
+      {/* GPU summary footer */}
+      <GpuSummary />
     </div>
   );
 }
