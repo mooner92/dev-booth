@@ -1,25 +1,46 @@
-# Dev-Booth Dashboard Redesign v8 — Ralph progress
+# Dev-Booth Hermes Agent Enhancement v9 — Ralph progress
 
-## Plan (in-prompt)
-Layout: 3-col (FileTree | Chat | Kanban+GPU) → 2-col (Kanban sidebar 240px | Chat+ProgressBar).
-Kanban: single vertical list ordered by created_at, status icons (✓/●animated/⊘/▶/⬜), TaskRow click→logs.
-GPU: small summary at sidebar bottom (util/mem/temp from /api/metrics/preset).
-Chat: top progress bar (done/total) + currentStageName; ChatStream tabs unchanged.
-ChatMessage: processBody (unicode unescape + tool_response/output tag strip); tool-call rows get bg-muted/40.
+## Plan
+in-prompt (no plan file in reports/plans for v9 — direct ralph run)
 
 ## Inheritance
-Builds on v7 skill activation (commits c72c27b → 91ed31e, all local).
+Builds on v8 dashboard redesign (commits c31974a → 3193161, all local).
 
-## Phase 0 (DONE)
-- GPU data path confirmed: api.getMetricsPreset(preset) for gpu_utilization/gpu_memory_used/gpu_temperature (same as MonitoringPane uses).
-- No `sidebar` CSS token — use `bg-card` / `bg-background` / `bg-muted`.
-- AppHeader exists but optional; new in-page top bar replaces it.
-- pytest baseline 153 (v7 carry-over). Frontend has no unit tests; tsc + npm run build = the gate.
+## Phase 0 — probes (DONE)
+- RTK 0.40.0 at ~/.local/bin/rtk; rtk-hermes 1.2.3 pip-installed in the Hermes venv.
+- rtk-hermes registers `[hermes_agent.plugins].rtk-rewrite=rtk_hermes` (entry-point match).
+- config.yaml had **3 duplicate `plugins:` blocks** at lines 536/540/544 — Phase 1 fix.
+- `hermes plugins list` only surfaces bundled plugins on v0.13.0 (pip-entry-point plugins load at runtime via `_scan_entry_points`).
+- All 3 profiles had NO MEMORY.md and NO devbooth-* skills — greenfield install.
+- firebase-003: 8 todo / 1 blocked / 3 done — operator unblock TODO.
 
-## Workers (in flight)
-- worker-A (designer/sonnet): KanbanBoard.tsx full rewrite + SessionDetailClient.tsx 3→2 col + progress bar + drop FileTreePane usage.
-- worker-B (executor/sonnet): ChatMessage.tsx processBody helper + tool-call bg.
+## Phase 1 — RTK plugin (DONE; live config only, no repo artifact)
+- config.yaml deduplicated to ONE plugins: block; backup at /tmp/v9-backup/hermes-config.yaml.
+- Python entry-point check confirms rtk-rewrite is discoverable.
+- Activation = `sudo systemctl restart hermes-gateway` (operator TODO).
 
-## Operator TODOs (post-merge)
-1. sudo systemctl restart dev-booth-dashboard
-2. DEV_BOOTH_DRYRUN=0 git push origin feat/kanban-redesign-2026-05-14
+## Phase 2 — MEMORY.md (DONE)
+- 3 files at ~/.hermes/profiles/<role>/MEMORY.md, sizes 1297/1392/1472 bytes (cap 2200).
+- Repo mirrors at /dev-booth/core/memories/<role>.MEMORY.md.
+
+## Phase 3 — Custom skills (DONE)
+- 3 SKILL.md files at ~/.hermes/skills/devbooth-{session-start,task-complete,context-save}/.
+- Repo mirrors at /dev-booth/core/skills/<name>/.
+- `hermes skills list` shows all 3 as `local/local/enabled`.
+
+## Phase 4 — SOUL.md update (DONE)
+- '## Dev-Booth 전용 스킬 (항상 사용)' section appended at tail of 3 core/souls + 3 ~/.hermes/profiles mirrors.
+- v5 ⚠️ + v6 팀 공지 규칙 + v7 스킬 카탈로그 sections all preserved.
+
+## Phase 5 — firebase-003 (OPERATOR TODO)
+- 1 blocked task on board. Unblock after Phase 1 activation (sudo gateway restart).
+
+## Phase 6 — verify (DONE)
+- pytest 153 passing (no backend change → no regression).
+- All evidence captured in results report.
+
+## Operator TODOs (sudo + push)
+1. sudo systemctl restart hermes-gateway
+2. Confirm rtk-rewrite activation via journalctl / one-shot probe
+3. Unblock firebase-003 blocked task
+4. DEV_BOOTH_DRYRUN=0 git push origin feat/kanban-redesign-2026-05-14
