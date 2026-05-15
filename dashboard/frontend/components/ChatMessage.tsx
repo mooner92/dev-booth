@@ -11,6 +11,23 @@ import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import { useMemo, useState } from "react";
 
+function processBody(raw: string | null | undefined): string {
+  if (!raw) return "";
+  let s = raw;
+  // Best-effort unicode unescape: `\uXXXX` → real char, but don't break already-rendered text.
+  // If the body looks like it contains '\u' sequences, try JSON.parse on a quoted form;
+  // on parse failure, keep the original.
+  if (s.includes("\\u")) {
+    try {
+      const decoded = JSON.parse(`"${s.replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t")}"`);
+      if (typeof decoded === "string") s = decoded;
+    } catch { /* keep raw on parse failure */ }
+  }
+  // Strip XML-style framing tags Hermes injects around tool calls.
+  s = s.replace(/<\/?tool_response>/g, "").replace(/<\/?output>/g, "");
+  return s.replace(/^\s+|\s+$/g, "");
+}
+
 export function ChatMessage({ entry }: { entry: LogEntry }) {
   const agent = entry.from ?? "system";
   const color = AGENT_COLORS[agent] ?? AGENT_COLORS.system;
@@ -26,9 +43,21 @@ export function ChatMessage({ entry }: { entry: LogEntry }) {
   }, [ts]);
   const [showAbsolute, setShowAbsolute] = useState(false);
   const isComment = entry.kind === "comment";
+  const rawBody = entry.body ?? "";
+  const isToolCall =
+    entry.kind === "tool" ||
+    rawBody.startsWith("kanban_") ||
+    rawBody.includes("preparing ");
+  const body = processBody(rawBody);
 
   return (
-    <div className={cn("flex items-start gap-3 px-4 py-2.5", isComment && "bg-muted/30")}>
+    <div
+      className={cn(
+        "flex items-start gap-3 px-4 py-2.5",
+        isComment && "bg-muted/30",
+        isToolCall && !isComment && "bg-muted/40",
+      )}
+    >
       <AgentAvatar agent={agent} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -55,7 +84,7 @@ export function ChatMessage({ entry }: { entry: LogEntry }) {
         </div>
         <div className="prose prose-sm dark:prose-invert mt-1 max-w-none break-words text-foreground">
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-            {entry.body ?? ""}
+            {body}
           </ReactMarkdown>
         </div>
       </div>
