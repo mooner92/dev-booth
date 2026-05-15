@@ -162,6 +162,27 @@ class KanbanReader:
             cleaned.append({"line": line})
         return cleaned[-limit:]
 
+    # ------------------------------------------- v6: board-wide timeline
+    def get_all_comments(self, limit: int = 200) -> list[dict[str, Any]]:
+        """Every comment on the board, oldest-first, joined with task title +
+        assignee. SQLite-direct (single query) — see plan §0 option A2.
+
+        Returns ready-to-project rows. The router projects to LogEntry shape
+        (`from`, `to`, `kind=comment`, `task_id`, `task_title`, `createdAtMs`)
+        in one place so both REST and WS speak the same dialect.
+        """
+        if not self.exists:
+            return []
+        with self._connect() as c:
+            rows = c.execute(
+                "SELECT c.id, c.task_id, c.author, c.body, c.created_at,"
+                "       t.title AS task_title, t.assignee AS task_assignee"
+                "  FROM task_comments AS c"
+                "  LEFT JOIN tasks AS t ON t.id = c.task_id"
+                " ORDER BY c.created_at ASC"
+            ).fetchall()
+        return [dict(r) for r in rows[-limit:]]
+
     # ----------------------------------------------------------- stats
     def get_board_stats(self) -> dict[str, int]:
         """Per-status task counts. SQLite COUNT (the CLI `stats` verb has no

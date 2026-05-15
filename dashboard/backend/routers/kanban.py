@@ -21,6 +21,7 @@ _WS_COMMENT_TASK_LIMIT = 12   # tasks whose comment threads the WS pushes
 _WS_COMMENT_LIMIT = 150       # most-recent comments pushed per update
 _WS_LOG_TASK_LIMIT = 5        # v5: tasks whose worker logs the WS pushes
 _WS_LOG_LINE_LIMIT = 50       # most-recent log lines per active task
+_WS_TIMELINE_LIMIT = 100      # v6: team-timeline entries pushed per update
 
 
 @router.get("/boards")
@@ -84,6 +85,47 @@ def _to_log_entry(task_id: str, assignee: str, idx: int, raw: dict) -> dict:
     }
 
 
+# ----------------------------------------------------- v6: team timeline
+@router.get("/boards/{board_slug}/timeline")
+def get_timeline(board_slug: str, limit: int = 200) -> dict:
+    """v6: aggregate every kanban_comment on the board, oldest-first, projected
+    to LogEntry shape. Powers the dashboard's '팀 타임라인' tab."""
+    reader = KanbanReader(board_slug)
+    if not reader.exists:
+        raise HTTPException(status_code=404, detail=f"board {board_slug!r} not found")
+    return {"entries": [_comment_to_log_entry(r) for r in reader.get_all_comments(limit=limit)]}
+
+
+def _comment_to_log_entry(row: dict) -> dict:
+    """Project a task_comments row into the LogEntry shape (kind='comment')."""
+    cid = row.get("id")
+    ts = row.get("created_at")  # seconds-epoch
+    return {
+        "id":          f"comment-{cid}",
+        "from":        row.get("author") or "system",
+        "to":          "all",
+        "kind":        "comment",
+        "body":        row.get("body") or "",
+        "task_id":     row.get("task_id"),
+        "task_title":  row.get("task_title"),
+        "createdAt":   _epoch_to_iso(ts),
+        "createdAtMs": (int(ts) if ts else 0) * 1000,
+    }
+
+
+def _epoch_to_iso(ts) -> str | None:
+    """seconds-epoch → ISO-8601 UTC string, or None on missing input."""
+    if ts is None:
+        return None
+    from datetime import datetime, timezone
+    return datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
+
+
+def _collect_timeline(reader: KanbanReader, limit: int = _WS_TIMELINE_LIMIT) -> list[dict]:
+    """WS-bounded timeline projection — see plan §4.2."""
+    return [_comment_to_log_entry(r) for r in reader.get_all_comments(limit=limit)]
+
+
 def _collect_comments(reader: KanbanReader, tasks: list[dict]) -> list[dict]:
     comments: list[dict] = []
     for task in tasks[:_WS_COMMENT_TASK_LIMIT]:
@@ -130,11 +172,13 @@ async def kanban_ws(websocket: WebSocket, board_slug: str) -> None:
                 tasks = await asyncio.to_thread(reader.list_tasks)
                 comments = await asyncio.to_thread(_collect_comments, reader, tasks)
                 logs = await asyncio.to_thread(_collect_logs, reader, tasks)
+                timeline = await asyncio.to_thread(_collect_timeline, reader)
                 await websocket.send_json({
                     "type": "kanban_update",
                     "tasks": tasks,
                     "comments": comments,
                     "logs": logs,
+                    "timeline": timeline,
                 })
             await asyncio.sleep(_WS_POLL_INTERVAL_S)
     except WebSocketDisconnect:

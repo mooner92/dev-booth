@@ -49,6 +49,9 @@ def _make_board(root, slug: str) -> None:
         [
             (1, "t_02", "conductor", "@architect 구조 분석 시작해주세요", 1778801411),
             (2, "t_02", "architect", "확인했습니다", 1778801412),
+            # v6: comment on a different task — exercises the LEFT JOIN's
+            # task_title resolution across multiple distinct task rows.
+            (3, "t_01", "conductor", "▶ fork & clone 시작", 1778801401),
         ],
     )
     conn.commit()
@@ -221,3 +224,47 @@ def test_route_task_log_projects_assignee(client, monkeypatch):
 
 def test_route_task_log_unknown_board_404(client):
     assert client.get("/api/kanban/boards/ghost/tasks/t_02/log").status_code == 404
+
+
+# ------------------------------------------ v6: get_all_comments / /timeline
+def test_get_all_comments_joins_task_title(boards_root):
+    """SQLite-direct LEFT JOIN attaches task_title to every comment, oldest-first."""
+    rows = KanbanReader("demo-board").get_all_comments()
+    assert len(rows) == 3
+    # Each row carries the joined fields
+    assert all("task_title" in r and "task_assignee" in r for r in rows)
+    # Distinct task_titles prove the join works across multiple parent rows
+    titles = {r["task_title"] for r in rows}
+    assert {"fork & clone", "initial scan"}.issubset(titles)
+    # Oldest-first ordering
+    timestamps = [r["created_at"] for r in rows]
+    assert timestamps == sorted(timestamps)
+
+
+def test_get_all_comments_limit(boards_root):
+    """`limit` returns the most-recent N (tail of the ordered list)."""
+    rows = KanbanReader("demo-board").get_all_comments(limit=1)
+    assert len(rows) == 1
+    # tail = newest comment (t_02 architect '확인했습니다' @ 1778801412)
+    assert rows[0]["body"] == "확인했습니다"
+
+
+def test_route_timeline_projects_to_log_entry(client):
+    """/timeline projects every row through _comment_to_log_entry server-side."""
+    resp = client.get("/api/kanban/boards/demo-board/timeline")
+    assert resp.status_code == 200
+    entries = resp.json()["entries"]
+    assert len(entries) == 3
+    first = entries[0]
+    assert first["kind"] == "comment"
+    assert first["to"] == "all"
+    assert first["from"] in ("conductor", "architect")
+    assert "task_title" in first and "task_id" in first
+    # createdAtMs derives from seconds-epoch (×1000)
+    assert isinstance(first["createdAtMs"], int) and first["createdAtMs"] > 0
+    # createdAt is an ISO-8601 UTC string
+    assert isinstance(first["createdAt"], str) and "T" in first["createdAt"]
+
+
+def test_route_timeline_unknown_board_404(client):
+    assert client.get("/api/kanban/boards/ghost/timeline").status_code == 404
