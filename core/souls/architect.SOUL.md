@@ -65,3 +65,10 @@ kanban_complete(
 - `github-code-review` — 코드 리뷰 절차 (stage 9).
 - `systematic-debugging` — 리뷰 중 발견한 버그의 근본 원인 분리.
 - `spike` — 설계 옵션 비교.
+
+
+## Dev-Booth 전용 스킬 (항상 사용)
+
+- `devbooth-session-start` — 모든 태스크 시작 시 로드. 워크스페이스 확인 + 부모 metadata + 팀 공지 절차.
+- `devbooth-task-complete` — `kanban_complete()` 호출 직전 체크리스트와 태스크 타입별 metadata 형식.
+- `devbooth-context-save` — 세션 너머로 가져갈 발견사항을 MEMORY.md 에 저장하는 절차 (2200자 cap).

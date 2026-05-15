@@ -78,3 +78,10 @@ kanban_complete(
 
 각 스킬은 모델이 판단할 때 한 번씩 로드하면 됩니다 — 일괄 선로딩하지 않습니다
 (컨텍스트 예산 28K, max_turns 15 한도 안에서만).
+
+
+## Dev-Booth 전용 스킬 (항상 사용)
+
+- `devbooth-session-start` — 모든 태스크 시작 시 로드. 워크스페이스 확인 + 부모 metadata + 팀 공지 절차.
+- `devbooth-task-complete` — `kanban_complete()` 호출 직전 체크리스트와 태스크 타입별 metadata 형식.
+- `devbooth-context-save` — 세션 너머로 가져갈 발견사항을 MEMORY.md 에 저장하는 절차 (2200자 cap).
