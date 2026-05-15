@@ -99,12 +99,15 @@ function SessionDetailInner({ name }: { name: string }) {
     }
     const done = tasks.filter((t) => t.status === "done").length;
     const pct = Math.round((done / total) * 100);
+    // priority ladder per PRD: running > blocked > ready > (done==total ? 완료 : 대기 중)
     const running = tasks.find((t) => t.status === "running");
-    const stageName = running
-      ? trimTaskTitle(running.title)
-      : done === total
-        ? "완료"
-        : "대기 중";
+    const blocked = !running && tasks.find((t) => t.status === "blocked");
+    const ready = !running && !blocked && tasks.find((t) => t.status === "ready");
+    let stageName: string;
+    if (running) stageName = trimTaskTitle(running.title);
+    else if (blocked) stageName = `차단됨: ${trimTaskTitle(blocked.title)}`;
+    else if (ready) stageName = `준비: ${trimTaskTitle(ready.title)}`;
+    else stageName = done === total ? "완료" : "대기 중";
     return { progressPercent: pct, currentStageName: stageName };
   }, [tasks, status]);
 
