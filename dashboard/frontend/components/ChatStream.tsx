@@ -1,12 +1,18 @@
 "use client";
 
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useRef, useState } from "react";
 import type { LogEntry } from "@/types";
 import { ChatMessage } from "@/components/ChatMessage";
-import { SCROLL_ANCHOR_THRESHOLD_PX, CHAT_VIRTUAL_ROW_HEIGHT } from "@/lib/constants";
+import { SCROLL_ANCHOR_THRESHOLD_PX } from "@/lib/constants";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// v10: dropped @tanstack/react-virtual in favor of a plain flex-column map.
+// The WS payload caps timelines at 100 entries and per-task logs at 50, so
+// the worst-case render is a few hundred rows — well under the threshold
+// where virtualization is worth the layout cost. The old fixed-height
+// virtualizer clipped long messages and created overlapping rows; the new
+// natural-height map renders each ChatMessage at its real height.
 
 export function ChatStream({
   entries,
@@ -24,43 +30,36 @@ export function ChatStream({
   onCloseSearch: () => void;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [stickToBottom, setStickToBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeTab, setActiveTab] = useState<"timeline" | "log">("timeline");
 
   const activeEntries = activeTab === "timeline" ? timeline : entries;
+  const q = query.toLowerCase();
+  const filtered = q
+    ? activeEntries.filter((e) => (e.body ?? "").toLowerCase().includes(q))
+    : activeEntries;
 
-  const filteredIndices = activeEntries
-    .map((e, i) => ({ entry: e, i }))
-    .filter(({ entry }) => !query || (entry.body ?? "").toLowerCase().includes(query.toLowerCase()));
-
-  const virtualizer = useVirtualizer({
-    count: filteredIndices.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => CHAT_VIRTUAL_ROW_HEIGHT,
-    overscan: 8,
-  });
-
-  // Sticky autoscroll
+  // Sticky autoscroll — scroll the bottom anchor into view whenever the
+  // filtered list grows AND the user is following the bottom.
   useEffect(() => {
-    const el = parentRef.current;
-    if (!el || !stickToBottom) return;
-    el.scrollTop = el.scrollHeight;
+    if (!stickToBottom) return;
+    bottomRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
     setUnreadCount(0);
-  }, [filteredIndices.length, stickToBottom]);
+  }, [filtered.length, stickToBottom]);
 
+  // When NOT following the bottom and new messages arrive, bump unread.
   useEffect(() => {
     if (!stickToBottom) setUnreadCount((c) => c + 1);
   }, [activeEntries.length, stickToBottom]);
 
-  // Page title notification when tab hidden
+  // Page title notification when tab hidden.
   useEffect(() => {
     if (typeof document === "undefined") return;
     function onVis() {
-      if (!document.hidden) {
-        document.title = "Dev-Booth Dashboard";
-      }
+      if (!document.hidden) document.title = "Dev-Booth Dashboard";
     }
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
@@ -138,7 +137,7 @@ export function ChatStream({
             placeholder="로그 검색 (Esc로 닫기)"
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
-          <span className="text-xs text-muted-foreground">{filteredIndices.length}건</span>
+          <span className="text-xs text-muted-foreground">{filtered.length}건</span>
         </div>
       )}
 
@@ -157,27 +156,16 @@ export function ChatStream({
       <div
         ref={parentRef}
         onScroll={onScroll}
-        className="flex-1 overflow-y-auto"
-        style={{ position: "relative" }}
+        className="relative min-h-0 flex-1 overflow-y-auto"
       >
-        <div style={{ height: `${virtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
-          {virtualizer.getVirtualItems().map((virtualRow) => {
-            const item = filteredIndices[virtualRow.index];
-            return (
-              <div
-                key={virtualRow.key}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
-              >
-                <ChatMessage entry={item.entry} />
-              </div>
-            );
-          })}
+        <div className="flex flex-col py-2">
+          {filtered.map((entry, i) => (
+            <ChatMessage
+              key={entry.id ?? `${activeTab}-${i}`}
+              entry={entry}
+            />
+          ))}
+          <div ref={bottomRef} />
         </div>
         {!stickToBottom && unreadCount > 0 && (
           <button
