@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Dev-Booth dryrun gate — Layer 1 (best-effort, repo-local).
+#
+# Installed by core/dryrun/install_hooks.sh into a cloned repo's
+# .git/hooks/pre-push. When present it fires on EVERY `git push` from that repo
+# regardless of how git is invoked (bare, absolute path, GitPython — all shell
+# out to git for the network op and hit this hook). It is "best-effort" because
+# it must be installed per-clone (the stage-1 worker does this); the
+# mechanically-enforced backstop is Layer 3 (GITHUB_TOKEN scrubbed from the
+# gateway env under dryrun — see run.sh), which needs no per-repo install.
+#
+# Under DEV_BOOTH_DRYRUN=1 the push is rejected. Install with:
+#   core/dryrun/install_hooks.sh <repo_path>
+set -euo pipefail
+
+if [[ "${DEV_BOOTH_DRYRUN:-1}" == "1" ]]; then
+  echo "[dryrun-gate] pre-push REJECTED: DEV_BOOTH_DRYRUN=1 — no real push allowed" >&2
+  exit 1
+fi
+exit 0

@@ -12,8 +12,13 @@ import { ChatStream } from "@/components/ChatStream";
 import { MonitoringPane } from "@/components/MonitoringPane";
 import { MonacoModal } from "@/components/MonacoModal";
 import { StageBar } from "@/components/StageBar";
+import { KanbanBoard } from "@/components/KanbanBoard";
 import type { FileTree, LogEntry, SessionDetail, StatusSnapshot, WSMessage } from "@/types";
 import { SESSION_STATE_LABELS } from "@/lib/constants";
+
+function toBoardSlug(name: string): string {
+  return name.toLowerCase().replace(/[_ ]+/g, "-");
+}
 
 function readSessionNameFromUrl(): string {
   if (typeof window === "undefined") return "";
@@ -161,8 +166,13 @@ function SessionDetailInner({ name }: { name: string }) {
         <section className="overflow-hidden">
           <ChatStream entries={entries} searchOpen={searchOpen} onCloseSearch={() => setSearchOpen(false)} />
         </section>
-        <aside className="hidden border-l border-border bg-card lg:block">
-          <MonitoringPane session={name} queues={status?.queues ?? {}} />
+        <aside className="hidden border-l border-border bg-card lg:flex lg:flex-col">
+          <div className="flex-1 overflow-y-auto border-b border-border">
+            <KanbanBoard boardSlug={toBoardSlug(name)} />
+          </div>
+          <div className="shrink-0">
+            <MonitoringPane session={name} queues={status?.queues ?? {}} />
+          </div>
         </aside>
       </div>
       <MonacoModal

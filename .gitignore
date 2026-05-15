@@ -11,3 +11,4 @@ dashboard/frontend/.next/
 .env
 agent-working-group/
 agent-working-group/
+.worktrees/

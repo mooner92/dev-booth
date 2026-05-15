@@ -1,54 +1,24 @@
-#!/bin/bash
-# US-008 — confirm the dashboard (port 7000) sees a session in real time and
-# that current_stage advances as the orchestrator narrates.
-#
-# Usage:  tests/e2e/verify_dashboard.sh [session_name]
-# Run this WHILE (or after) an e2e dryrun for <session_name> is in progress.
+#!/usr/bin/env bash
+# Dev-Booth E2E — confirm the dashboard surfaces the live Kanban board.
+# Run while (or after) e2e_dryrun.sh has seeded a board.
+# Usage: tests/e2e/verify_dashboard.sh [board_slug]
 set -euo pipefail
 
-SESSION="${1:-e2e-dryrun}"
 API="http://localhost:7000/api"
-SAMPLES="${SAMPLES:-8}"
-INTERVAL_S=20
+BOARD="${1:-e2e-kanban-dryrun}"
 
-echo "[verify_dashboard] session=${SESSION} api=${API}"
+echo "[verify] board=$BOARD api=$API"
+fail=0
+chk() { if [ "$2" -eq 0 ]; then echo "  ok   $1"; else echo "  FAIL $1"; fail=1; fi; }
 
-# 0. dashboard health
-health=$(curl -s -m 5 "${API}/health" || true)
-echo "[verify_dashboard] health: ${health}"
-echo "${health}" | grep -q '"ok":true' || { echo "  FAIL dashboard not healthy"; exit 1; }
-
-# 1. session appears in the listing
-listing=$(curl -s -m 5 "${API}/sessions" || true)
-if echo "${listing}" | grep -q "\"${SESSION}\""; then
-  echo "  ok   session '${SESSION}' visible in /api/sessions"
-else
-  echo "  FAIL session '${SESSION}' not in /api/sessions"
-  exit 1
-fi
-
-# 2. sample current_stage over time — assert it reaches >= 1 and never regresses
-prev=-1
-max_stage=0
-transitions=0
-for i in $(seq 1 "${SAMPLES}"); do
-  status=$(curl -s -m 5 "${API}/sessions/${SESSION}/status" || true)
-  stage=$(echo "${status}" | python3 -c "import json,sys; print(json.load(sys.stdin).get('current_stage',-1))" 2>/dev/null || echo -1)
-  echo "  sample ${i}: current_stage=${stage}"
-  if [[ "${stage}" -gt "${prev}" && "${prev}" -ge 0 ]]; then
-    transitions=$((transitions + 1))
-  fi
-  [[ "${stage}" -gt "${max_stage}" ]] && max_stage="${stage}"
-  prev="${stage}"
-  sleep "${INTERVAL_S}"
-done
+curl -s -m5 "$API/health" | grep -q '"ok":true'; chk "dashboard healthy" $?
+curl -s -m5 "$API/kanban/boards" | grep -q "\"$BOARD\""; chk "board listed in /api/kanban/boards" $?
+curl -s -m5 "$API/kanban/boards/$BOARD/tasks" | grep -q '"tasks"'; chk "tasks endpoint returns JSON" $?
+curl -s -m5 "$API/kanban/boards/$BOARD/stats" | grep -qE '"(todo|ready|running|done)"'; chk "stats endpoint returns status counts" $?
 
 echo
-if [[ "${max_stage}" -ge 1 ]]; then
-  echo "  ok   dashboard reported current_stage >= 1 (max=${max_stage}, transitions=${transitions})"
-  echo "[verify_dashboard] PASS"
-  exit 0
-else
-  echo "  FAIL dashboard never reported a stage >= 1"
-  exit 1
-fi
+echo "[verify] live board stats:"
+curl -s -m5 "$API/kanban/boards/$BOARD/stats"
+echo
+[ "$fail" -eq 0 ] && echo "[verify] PASSED" || echo "[verify] FAILED"
+exit "$fail"

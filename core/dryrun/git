@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Dev-Booth dryrun gate — Layer 2 (defense-in-depth) for `git`.
+#
+# Prepended to the gateway dispatcher's PATH at launch (run.sh). Dispatcher-
+# spawned workers inherit the dispatcher's PATH (env=dict(os.environ)), so a
+# worker that runs a bare `git` resolves THIS wrapper first. Bypassable via an
+# absolute path (/usr/bin/git) — hence "defense-in-depth", not the backstop.
+#
+# Under DEV_BOOTH_DRYRUN=1: a `git push` is rewritten to `git push --dry-run`
+# (idempotent if --dry-run already present). Every other git command passes
+# through untouched. The mechanically-enforced backstop is Layer 3 (GITHUB_TOKEN
+# scrubbed from the worker env — no credential, no push by any path; see
+# run.sh); Layer 1 (the per-clone pre-push hook) is best-effort.
+set -euo pipefail
+
+REAL_GIT="$(command -v -p git || echo /usr/bin/git)"
+# resolve the first `git` on PATH that is NOT this wrapper
+for cand in $(type -ap git 2>/dev/null); do
+  case "$cand" in
+    */core/dryrun/git) continue ;;
+    *) REAL_GIT="$cand"; break ;;
+  esac
+done
+
+if [[ "${DEV_BOOTH_DRYRUN:-1}" == "1" ]]; then
+  for arg in "$@"; do
+    if [[ "$arg" == "push" ]]; then
+      if printf '%s\0' "$@" | grep -qz -- '--dry-run'; then
+        exec "$REAL_GIT" "$@"
+      fi
+      echo "[dryrun-gate] git push intercepted -> injecting --dry-run" >&2
+      exec "$REAL_GIT" "$@" --dry-run
+    fi
+  done
+fi
+exec "$REAL_GIT" "$@"
