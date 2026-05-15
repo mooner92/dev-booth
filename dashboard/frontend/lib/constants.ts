@@ -9,22 +9,22 @@ export const WS_HEARTBEAT_INTERVAL_S = 20;
 export const WS_IDLE_TIMEOUT_S = 60;
 export const WS_RECONNECT_BACKOFF_MS = [500, 1000, 2000, 4000, 8000] as const;
 
-export const AGENTS = ["openclaw", "hermes-a", "hermes-b"] as const;
+export const AGENTS = ["conductor", "architect", "executor"] as const;
 export const AGENT_COLORS: Record<string, string> = {
-  openclaw: "#FF4136",
-  "hermes-a": "#0070F3",
-  "hermes-b": "#00B493",
+  conductor: "#FF4136",
+  "architect": "#0070F3",
+  "executor": "#00B493",
   system: "#6B7280",
 };
 export const AGENT_LABELS: Record<string, string> = {
-  openclaw: "OpenClaw",
-  "hermes-a": "Hermes-A",
-  "hermes-b": "Hermes-B",
+  conductor: "Conductor",
+  "architect": "Architect",
+  "executor": "Executor",
 };
 export const AGENT_INITIALS: Record<string, string> = {
-  openclaw: "OC",
-  "hermes-a": "HA",
-  "hermes-b": "HB",
+  conductor: "CD",
+  "architect": "AR",
+  "executor": "EX",
 };
 
 export const STAGE_LABELS: Record<string, string> = {

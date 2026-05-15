@@ -4,12 +4,12 @@ from dashboard.backend.services import session_layout
 
 
 def test_resolve_queues_only(tmp_sessions_root, make_session):
-    make_session("alpha", messages=[], queue_files={("hermes-a", "inbox"): 2})
+    make_session("alpha", messages=[], queue_files={("architect", "inbox"): 2})
     layout = session_layout.resolve("alpha", tmp_sessions_root)
     assert layout.name == "alpha"
     assert layout.has_log is True
     assert layout.has_queues is True
-    assert "hermes-a" in layout.agents
+    assert "architect" in layout.agents
 
 
 def test_resolve_empty_session(tmp_sessions_root):

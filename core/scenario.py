@@ -8,7 +8,7 @@ assigned profiles as workers.
 Kept from v1 (P3 — reuse the tested domain layer):
   * STAGE_NARRATION — the canonical narration corpus (carries stage_mapper
     keywords so the dashboard derives a monotonic 12->~8 stage progression).
-  * the assignee mapping (openclaw / hermes-a / hermes-b).
+  * the assignee mapping (conductor / architect / executor).
   * the dryrun policy (DEV_BOOTH_DRYRUN, default on).
 
 Retired from v1: the hermes -z per-turn execution loop, the MessageQueue
@@ -32,8 +32,8 @@ from typing import Optional
 STAGE_NARRATION: dict[int, str] = {
     1:  "git clone: 레포지토리 포킹 및 클론 시작",
     2:  "initial scan: 프로젝트 초기 분석 시작",
-    3:  "initial scan: 코드 구조 분석 중 (Hermes-A)",
-    4:  "initial scan: 의존성 분석 중 (Hermes-B)",
+    3:  "initial scan: 코드 구조 분석 중 (Architect)",
+    4:  "initial scan: 의존성 분석 중 (Executor)",
     5:  "initial scan: 분석 취합 및 요약 작성",
     6:  "drafting the implementation plan: 개선방안 계획 수립",
     7:  "plan approved: 개발 계획 승인, feature 브랜치 생성",
@@ -47,7 +47,7 @@ STAGE_NARRATION: dict[int, str] = {
 # The three real Hermes profiles the dispatcher can spawn. A task assigned to
 # any other name sits in `ready` forever (the dispatcher silently does not
 # spawn unknown assignees) — core/session.py validates against this set.
-ALLOWED_ASSIGNEES: frozenset[str] = frozenset({"openclaw", "hermes-a", "hermes-b"})
+ALLOWED_ASSIGNEES: frozenset[str] = frozenset({"conductor", "architect", "executor"})
 
 
 @dataclass
@@ -56,7 +56,7 @@ class StageTask:
 
     stage: int
     title: str
-    assignee: str          # openclaw / hermes-a / hermes-b
+    assignee: str          # conductor / architect / executor
     workspace: str         # worktree / dir:<path> / scratch
     tag: str               # orchestration / analysis / implementation / review / pr
     body_template: str
@@ -72,7 +72,7 @@ class StageTask:
 STAGE_DAG: list[StageTask] = [
     StageTask(
         stage=1, title="[{repo}] fork & clone",
-        assignee="openclaw", workspace="worktree", tag="orchestration",
+        assignee="conductor", workspace="worktree", tag="orchestration",
         body_template="""레포지토리를 fork하고 clone하세요.
 
 레포: {repo_url}
@@ -91,17 +91,17 @@ clone 직후 반드시 dryrun 안전 훅을 설치하세요 (clone 경로를 인
 """),
     StageTask(
         stage=2, title="[{repo}] initial project scan",
-        assignee="openclaw", workspace="worktree", tag="orchestration",
+        assignee="conductor", workspace="worktree", tag="orchestration",
         parent_stages=[1],
         body_template="""클론된 레포를 초기 스캔하세요.
 
-완료 후 Hermes-A에게 코드 구조 분석 태스크,
-Hermes-B에게 의존성 분석 태스크를 kanban_create()로 생성하세요.
+완료 후 Architect에게 코드 구조 분석 태스크,
+Executor에게 의존성 분석 태스크를 kanban_create()로 생성하세요.
 각 태스크에 --parent 현재 태스크 ID를 설정하세요.
 """),
     StageTask(
         stage=3, title="[{repo}] code structure analysis",
-        assignee="hermes-a", workspace="worktree", tag="analysis",
+        assignee="architect", workspace="worktree", tag="analysis",
         parent_stages=[2],
         body_template="""코드 구조와 아키텍처를 분석하세요.
 
@@ -111,13 +111,13 @@ Hermes-B에게 의존성 분석 태스크를 kanban_create()로 생성하세요.
 - 코드 품질 이슈 (중복, 복잡도, 미사용 코드)
 - 개선 가능한 아키텍처 포인트
 
-결과를 /dev-booth/sessions/{session}/analysis_hermes_a.md 에 저장하세요.
+결과를 /dev-booth/sessions/{session}/analysis_architect.md 에 저장하세요.
 완료 시 kanban_complete()에 findings 포함:
-metadata: {{"file": "analysis_hermes_a.md", "issues_found": N}}
+metadata: {{"file": "analysis_architect.md", "issues_found": N}}
 """),
     StageTask(
         stage=4, title="[{repo}] dependency & tech stack analysis",
-        assignee="hermes-b", workspace="worktree", tag="analysis",
+        assignee="executor", workspace="worktree", tag="analysis",
         parent_stages=[2],
         body_template="""의존성과 기술 스택을 분석하세요.
 
@@ -127,24 +127,24 @@ metadata: {{"file": "analysis_hermes_a.md", "issues_found": N}}
 - 테스트 커버리지 현황
 - CI/CD 설정
 
-결과를 /dev-booth/sessions/{session}/analysis_hermes_b.md 에 저장하세요.
+결과를 /dev-booth/sessions/{session}/analysis_executor.md 에 저장하세요.
 완료 시 kanban_complete()에 findings 포함.
 """),
     StageTask(
         stage=5, title="[{repo}] analysis summary",
-        assignee="openclaw", workspace="worktree", tag="orchestration",
+        assignee="conductor", workspace="worktree", tag="orchestration",
         parent_stages=[3, 4],
-        body_template="""Hermes-A와 Hermes-B의 분석 결과를 취합하여
+        body_template="""Architect와 Executor의 분석 결과를 취합하여
 /dev-booth/sessions/{session}/summary_v1.0.0.md 를 작성하세요.
 
 부모 태스크의 kanban_show()로 findings를 읽어서 종합하세요.
 """),
     StageTask(
         stage=6, title="[{repo}] improvements plan",
-        assignee="openclaw", workspace="worktree", tag="orchestration",
+        assignee="conductor", workspace="worktree", tag="orchestration",
         parent_stages=[5],
         body_template="""summary를 바탕으로 개선방안을 작성하세요.
-(Hermes-A, Hermes-B와 kanban_comment()로 의견 교환 후 확정)
+(Architect, Executor와 kanban_comment()로 의견 교환 후 확정)
 
 /dev-booth/sessions/{session}/improvements_v0.0.1.md 작성:
 - TASK 목록 (각 TASK에 담당자, 예상 파일, 설명 포함)
@@ -154,7 +154,7 @@ metadata: {{"file": "analysis_hermes_a.md", "issues_found": N}}
 """),
     StageTask(
         stage=7, title="[{repo}] create feature branch",
-        assignee="openclaw", workspace="worktree", tag="orchestration",
+        assignee="conductor", workspace="worktree", tag="orchestration",
         parent_stages=[6],
         body_template="""feature 브랜치를 생성하세요.
 브랜치명: feature/devbooth-{session}-improvements
@@ -163,7 +163,7 @@ DEV_BOOTH_DRYRUN=1 이면 git push에 --dry-run 옵션 사용.
 """),
     StageTask(
         stage=8, title="[{repo}] implement TASK-{n}",
-        assignee="hermes-b", workspace="worktree", tag="implementation",
+        assignee="executor", workspace="worktree", tag="implementation",
         parent_stages=[7],
         body_template="""improvements_v0.0.1.md 의 TASK-{n}을 구현하세요.
 
@@ -177,9 +177,9 @@ metadata: {{"changed_files": [...], "test_result": "passed/failed"}}
 """),
     StageTask(
         stage=9, title="[{repo}] code review TASK-{n}",
-        assignee="hermes-a", workspace="worktree", tag="review",
+        assignee="architect", workspace="worktree", tag="review",
         parent_stages=[8], is_review_gate=True,
-        body_template="""Hermes-B의 구현을 리뷰하세요.
+        body_template="""Executor의 구현을 리뷰하세요.
 
 리뷰 기준:
 - 기존 코드 스타일 준수
@@ -192,7 +192,7 @@ metadata: {{"changed_files": [...], "test_result": "passed/failed"}}
 """),
     StageTask(
         stage=10, title="[{repo}] commit approved changes",
-        assignee="openclaw", workspace="worktree", tag="orchestration",
+        assignee="conductor", workspace="worktree", tag="orchestration",
         parent_stages=[9],
         body_template="""리뷰 통과된 변경사항을 커밋하세요.
 커밋 메시지: "feat: {task_description} [devbooth/{session}]"
@@ -201,7 +201,7 @@ DEV_BOOTH_DRYRUN=1 이면 커밋만, push는 --dry-run.
 """),
     StageTask(
         stage=11, title="[{repo}] draft PR",
-        assignee="openclaw", workspace="worktree", tag="pr",
+        assignee="conductor", workspace="worktree", tag="pr",
         parent_stages=[10],
         body_template="""PR을 작성하세요.
 
@@ -213,7 +213,7 @@ DEV_BOOTH_DRYRUN=1 이면 /dev-booth/sessions/{session}/pr_draft.json 저장.
 """),
     StageTask(
         stage=12, title="[{repo}] submit PR",
-        assignee="openclaw", workspace="worktree", tag="pr",
+        assignee="conductor", workspace="worktree", tag="pr",
         parent_stages=[11],
         body_template="""CrownClownCrowd → mooner92 PR을 제출하세요.
 

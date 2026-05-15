@@ -29,9 +29,9 @@ const config: Config = {
           info: "#0070F3",
         },
         agent: {
-          openclaw: "#FF4136",
-          "hermes-a": "#0070F3",
-          "hermes-b": "#00B493",
+          conductor: "#FF4136",
+          "architect": "#0070F3",
+          "executor": "#00B493",
           system: "#6B7280",
         },
         neutral: {

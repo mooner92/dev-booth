@@ -7,7 +7,7 @@ spawns the assigned profiles as workers.
 
 CLI command form (verified in Phase 0): the ``--board <slug>`` flag is a
 ``hermes kanban``-LEVEL flag and must come BEFORE the subcommand:
-    hermes kanban --board <slug> create "<title>" --assignee openclaw ...
+    hermes kanban --board <slug> create "<title>" --assignee conductor ...
 Board-management verbs (`boards create`, `boards list`) take the slug
 positionally and do not use ``--board``.
 """
@@ -112,7 +112,7 @@ class DevBoothSession:
             json.dumps(stage_id_map, indent=2), encoding="utf-8"
         )
         self._write_status(
-            step=1, agent="openclaw", status="active",
+            step=1, agent="conductor", status="active",
             board_slug=self.board_slug, stage_task_map=stage_id_map,
         )
         print(f"OK seed: {len(stage_id_map)} tasks on board {self.board_slug}")

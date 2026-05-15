@@ -15,8 +15,8 @@ async def append(log_path: Path, marker: str) -> None:
     entry = {
         "id": marker,
         "kind": "instruction",
-        "from": "openclaw",
-        "to": "hermes-a",
+        "from": "conductor",
+        "to": "architect",
         "body": f"resume probe {marker}",
         "createdAt": "2026-05-14T03:00:00Z",
         "createdAtMs": int(time.time() * 1000),

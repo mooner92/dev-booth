@@ -38,17 +38,17 @@ def _make_board(root, slug: str) -> None:
         "INSERT INTO tasks (id,title,assignee,status,priority,workspace_kind,created_at) "
         "VALUES (?,?,?,?,?,?,?)",
         [
-            ("t_01", "fork & clone", "openclaw", "done", 1, "worktree", 1778801400),
-            ("t_02", "initial scan", "openclaw", "running", 1, "worktree", 1778801410),
-            ("t_03", "structure analysis", "hermes-a", "ready", 1, "worktree", 1778801420),
-            ("t_09", "code review", "hermes-a", "blocked", 1, "worktree", 1778801490),
+            ("t_01", "fork & clone", "conductor", "done", 1, "worktree", 1778801400),
+            ("t_02", "initial scan", "conductor", "running", 1, "worktree", 1778801410),
+            ("t_03", "structure analysis", "architect", "ready", 1, "worktree", 1778801420),
+            ("t_09", "code review", "architect", "blocked", 1, "worktree", 1778801490),
         ],
     )
     conn.executemany(
         "INSERT INTO task_comments (id,task_id,author,body,created_at) VALUES (?,?,?,?,?)",
         [
-            (1, "t_02", "openclaw", "@hermes-a 구조 분석 시작해주세요", 1778801411),
-            (2, "t_02", "hermes-a", "확인했습니다", 1778801412),
+            (1, "t_02", "conductor", "@architect 구조 분석 시작해주세요", 1778801411),
+            (2, "t_02", "architect", "확인했습니다", 1778801412),
         ],
     )
     conn.commit()
@@ -78,7 +78,7 @@ def test_list_tasks_sqlite_fallback(boards_root, monkeypatch):
     monkeypatch.setattr(KanbanReader, "_run", staticmethod(lambda *a: None))
     tasks = KanbanReader("demo-board").list_tasks()
     assert [t["id"] for t in tasks] == ["t_01", "t_02", "t_03", "t_09"]
-    assert tasks[0]["assignee"] == "openclaw"
+    assert tasks[0]["assignee"] == "conductor"
     assert tasks[3]["status"] == "blocked"
 
 
@@ -100,7 +100,7 @@ def test_board_stats(boards_root):
 def test_get_comments_sqlite_fallback(boards_root, monkeypatch):
     monkeypatch.setattr(KanbanReader, "_run", staticmethod(lambda *a: None))
     comments = KanbanReader("demo-board").get_comments("t_02")
-    assert [c["author"] for c in comments] == ["openclaw", "hermes-a"]
+    assert [c["author"] for c in comments] == ["conductor", "architect"]
 
 
 # ----------------------------------------------------------- REST routes

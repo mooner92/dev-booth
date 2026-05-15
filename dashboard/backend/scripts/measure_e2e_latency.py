@@ -53,8 +53,8 @@ async def measure(session: str, count: int, base_url: str, ws_url: str) -> tuple
             entry = {
                 "id": marker,
                 "kind": "instruction",
-                "from": "openclaw",
-                "to": "hermes-a",
+                "from": "conductor",
+                "to": "architect",
                 "body": f"latency probe #{i}",
                 "createdAt": "2026-05-14T03:00:00Z",
                 "createdAtMs": int(time.time() * 1000),

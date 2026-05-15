@@ -12,17 +12,17 @@ def test_log_entry_parses_real_schema(sample_awg_message):
     entry = LogEntry.model_validate(sample_awg_message)
     assert entry.id == "test-uuid-1"
     assert entry.kind == "instruction"
-    assert entry.from_ == "openclaw"
-    assert entry.to == "hermes-a"
+    assert entry.from_ == "conductor"
+    assert entry.to == "architect"
     assert entry.body.startswith("프로젝트")
     assert entry.created_at_ms == 1778500800000
-    assert entry.agent == "openclaw"
+    assert entry.agent == "conductor"
 
 
 def test_log_entry_round_trip(sample_awg_message):
     entry = LogEntry.model_validate(sample_awg_message)
     dumped = entry.model_dump(by_alias=True, exclude_none=True)
-    assert dumped["from"] == "openclaw"
+    assert dumped["from"] == "conductor"
     assert "createdAt" in dumped
     assert "createdAtMs" in dumped
 
@@ -35,7 +35,7 @@ def test_iter_log_file(tmp_path: Path, sample_awg_message):
             fh.write(json.dumps(msg, ensure_ascii=False) + "\n")
     entries = list(iter_log_file(p))
     assert len(entries) == 5
-    assert all(e.from_ == "openclaw" for e in entries)
+    assert all(e.from_ == "conductor" for e in entries)
     assert entries[3].id == "id-3"
 
 

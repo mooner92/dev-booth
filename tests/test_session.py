@@ -102,10 +102,10 @@ def test_seed_raises_on_unknown_assignee(sess, monkeypatch):
 # ------------------------------------------------------------- _write_status
 def test_write_status_schema(sess):
     sess.session_path.mkdir(parents=True, exist_ok=True)
-    sess._write_status(step=3, agent="hermes-a", status="active", board_slug="test-sess")
+    sess._write_status(step=3, agent="architect", status="active", board_slug="test-sess")
     status = json.loads((sess.session_path / "status.json").read_text(encoding="utf-8"))
     for key in ("session", "status", "current_step", "current_agent", "repo_url",
                 "repo_name", "board_slug", "dryrun", "started_at"):
         assert key in status
     assert status["current_step"] == 3
-    assert status["current_agent"] == "hermes-a"
+    assert status["current_agent"] == "architect"

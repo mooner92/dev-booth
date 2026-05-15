@@ -30,8 +30,8 @@ def test_tailer_reads_new_entries(tmp_path: Path):
     result = tailer.read_new()
     assert result.entries == []
 
-    _append(p, {"id": "1", "body": "hello", "from": "openclaw"})
-    _append(p, {"id": "2", "body": "world", "from": "hermes-a"})
+    _append(p, {"id": "1", "body": "hello", "from": "conductor"})
+    _append(p, {"id": "2", "body": "world", "from": "architect"})
 
     result = tailer.read_new()
     assert len(result.entries) == 2

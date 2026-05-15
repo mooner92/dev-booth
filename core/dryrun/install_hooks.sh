@@ -3,7 +3,7 @@
 #
 # Usage: core/dryrun/install_hooks.sh <repo_path>
 #
-# The stage-1 scenario task body instructs the openclaw worker to run this
+# The stage-1 scenario task body instructs the conductor worker to run this
 # right after it clones the target repo (the worker's clone is a fresh
 # standalone repo with its own .git, NOT a worktree of /dev-booth — so it does
 # not inherit /dev-booth's hooks; it needs its own). This is a best-effort

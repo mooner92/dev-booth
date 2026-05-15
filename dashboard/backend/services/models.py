@@ -4,8 +4,8 @@ The `LogEntry` schema mirrors the *actual* AWG message format observed at
 ``/dev-booth/sessions/test-awg/log/messages.jsonl``:
 
     {"id": "uuid", "kind": "instruction"|"response"|...,
-     "from": "openclaw"|"hermes-a"|"hermes-b",
-     "to":   "openclaw"|"hermes-a"|"hermes-b",
+     "from": "conductor"|"architect"|"executor",
+     "to":   "conductor"|"architect"|"executor",
      "body": "<message>", "refs": {...},
      "priority": int, "createdAt": "ISO8601", "createdAtMs": int}
 

@@ -9,8 +9,8 @@ AWG message format on disk is:
 {
   "id": "2502518c-370b-445c-be9d-45a45b8f8d40",
   "kind": "instruction",
-  "from": "openclaw",
-  "to": "hermes-a",
+  "from": "conductor",
+  "to": "architect",
   "body": "프로젝트 분석을 시작해주세요.",
   "refs": {},
   "priority": 50,
@@ -25,7 +25,7 @@ AWG message format on disk is:
 |-------|------|-------|
 | `id` | string (UUID v4) | Unique per message |
 | `kind` | string | `instruction`, `response`, ... |
-| `from` | string | Sender agent: `openclaw` \| `hermes-a` \| `hermes-b` |
+| `from` | string | Sender agent: `conductor` \| `architect` \| `executor` |
 | `to` | string | Recipient agent (same enum) |
 | `body` | string | Message text (Korean + English) |
 | `refs` | object | Free-form, may contain `receivedAt`, `receivedAtMs`, references to other ids |
@@ -41,6 +41,6 @@ about the rename.
 ## Notes for UI
 
 - Sender identity (`from`) is used for the agent dot/color.
-- `kind == "instruction"` typically flows OpenClaw → Hermes-A/B.
-- `kind == "response"` typically flows Hermes → OpenClaw.
+- `kind == "instruction"` typically flows Conductor → Architect/B.
+- `kind == "response"` typically flows Hermes → Conductor.
 - The dashboard does NOT mutate or write these files.
