@@ -108,6 +108,17 @@ export type WSMessage =
   | { type: "pong"; ts: string }
   | { type: "error"; ts: string; error: string };
 
+export interface GithubStatus {
+  logged_in: boolean;
+  account: string | null;
+  target: string;
+}
+
+export interface StartSessionResponse {
+  session_name: string;
+  status: string;
+}
+
 /** Shape of a kanban_update WebSocket push from /api/kanban/ws/kanban/:slug */
 export interface KanbanWSUpdate {
   type: "kanban_update";
