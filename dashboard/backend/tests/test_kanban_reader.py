@@ -139,3 +139,85 @@ def test_route_comments(client, monkeypatch):
     resp = client.get("/api/kanban/boards/demo-board/tasks/t_02/comments")
     assert resp.status_code == 200
     assert len(resp.json()["comments"]) == 2
+
+
+# ----------------------------------------- v5: get_runs / get_task_log
+_RUNS_FIXTURE = """\
+#    OUTCOME       PROFILE            ELAPSED  STARTED
+  1  crashed       executor               40m  2026-05-15 04:19
+     ✖ worker exited cleanly (rc=0) without calling kanban_complete or kanban_block — protocol violation
+  2  (running)     executor              1.0h  2026-05-15 04:27
+"""
+
+_LOG_FIXTURE = """\
+╭─ ⚕ Hermes ───────────────────────────────────────────────────────────────────╮
+  Let's start by cloning the repository.
+╰──────────────────────────────────────────────────────────────────────────────╯
+  ┊ 💻 preparing terminal…
+  ┊ 💻 $ git clone https://github.com/example/firebase-app  0.5s [error]
+  ┊ 📋 preparing kanban_show…
+  ┊ ⚡ kanban_show   0.0s
+"""
+
+
+def test_get_runs_parses_attempts(boards_root, monkeypatch):
+    monkeypatch.setattr(KanbanReader, "_run",
+                        staticmethod(lambda *a: _RUNS_FIXTURE if "runs" in a else None))
+    runs = KanbanReader("demo-board").get_runs("t_02")
+    assert len(runs) == 2
+    assert runs[0]["attempt"] == 1 and runs[0]["outcome"] == "crashed"
+    assert runs[0]["profile"] == "executor"
+    assert "protocol violation" in runs[0].get("detail", "")
+    assert runs[1]["attempt"] == 2 and runs[1]["outcome"] == "running"
+
+
+def test_get_runs_empty_on_no_output(boards_root, monkeypatch):
+    monkeypatch.setattr(KanbanReader, "_run", staticmethod(lambda *a: None))
+    assert KanbanReader("demo-board").get_runs("missing") == []
+
+
+def test_get_task_log_strips_decoration(boards_root, monkeypatch):
+    monkeypatch.setattr(KanbanReader, "_run",
+                        staticmethod(lambda *a: _LOG_FIXTURE if "log" in a else None))
+    lines = KanbanReader("demo-board").get_task_log("t_02")
+    bodies = [e["line"] for e in lines]
+    # Box-drawing pure-decoration lines must be filtered out
+    assert not any(b in ("", "─", "│") for b in bodies)
+    assert any("git clone" in b for b in bodies)
+    assert any("kanban_show" in b for b in bodies)
+
+
+def test_get_task_log_limits_results(boards_root, monkeypatch):
+    fixture = "\n".join(f"line {i}" for i in range(200))
+    monkeypatch.setattr(KanbanReader, "_run",
+                        staticmethod(lambda *a: fixture if "log" in a else None))
+    lines = KanbanReader("demo-board").get_task_log("t_02", limit=10)
+    assert len(lines) == 10
+    # Returns the *most recent* lines (tail)
+    assert lines[-1]["line"].endswith("199")
+
+
+def test_route_task_log_projects_assignee(client, monkeypatch):
+    # log returns content, runs returns empty
+    def fake_run(*a):
+        if "log" in a:
+            return "agent says hello\nkanban_complete(summary=...)"
+        if "runs" in a:
+            return _RUNS_FIXTURE
+        return None
+    monkeypatch.setattr(KanbanReader, "_run", staticmethod(fake_run))
+    resp = client.get("/api/kanban/boards/demo-board/tasks/t_02/log")
+    assert resp.status_code == 200
+    payload = resp.json()
+    msgs = payload["messages"]
+    assert len(msgs) == 2
+    # Agent identity comes from task.assignee (t_02 is conductor in the fixture).
+    assert all(m["from"] == "conductor" for m in msgs)
+    # The kanban_* line should be tagged as a tool entry.
+    assert msgs[1]["kind"] == "tool"
+    # runs piggybacks on the same endpoint
+    assert len(payload["runs"]) == 2
+
+
+def test_route_task_log_unknown_board_404(client):
+    assert client.get("/api/kanban/boards/ghost/tasks/t_02/log").status_code == 404

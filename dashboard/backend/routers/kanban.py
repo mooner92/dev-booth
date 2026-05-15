@@ -19,6 +19,8 @@ router = APIRouter(prefix="/api/kanban", tags=["kanban"])
 _WS_POLL_INTERVAL_S = 2.0
 _WS_COMMENT_TASK_LIMIT = 12   # tasks whose comment threads the WS pushes
 _WS_COMMENT_LIMIT = 150       # most-recent comments pushed per update
+_WS_LOG_TASK_LIMIT = 5        # v5: tasks whose worker logs the WS pushes
+_WS_LOG_LINE_LIMIT = 50       # most-recent log lines per active task
 
 
 @router.get("/boards")
@@ -50,6 +52,38 @@ def get_task_comments(board_slug: str, task_id: str) -> dict:
     return {"comments": reader.get_comments(task_id)}
 
 
+@router.get("/boards/{board_slug}/tasks/{task_id}/log")
+def get_task_log(board_slug: str, task_id: str) -> dict:
+    """v5: surface the worker transcript (``hermes kanban log``) so the
+    dashboard ChatStream can render per-turn agent activity. Falls back
+    to runs+comments via the same reader when ``log`` is empty."""
+    reader = KanbanReader(board_slug)
+    if not reader.exists:
+        raise HTTPException(status_code=404, detail=f"board {board_slug!r} not found")
+    # Determine the agent identity from the task row (NOT log-content regex).
+    assignee = "system"
+    for t in reader.list_tasks():
+        if t.get("id") == task_id:
+            assignee = t.get("assignee") or "system"
+            break
+    raw = reader.get_task_log(task_id)
+    messages = [_to_log_entry(task_id, assignee, i, e) for i, e in enumerate(raw)]
+    return {"messages": messages, "runs": reader.get_runs(task_id)}
+
+
+def _to_log_entry(task_id: str, assignee: str, idx: int, raw: dict) -> dict:
+    """Project a worker-log line into the dashboard's LogEntry shape."""
+    body = raw.get("line", "")
+    return {
+        "id":        f"log-{task_id}-{idx}",
+        "from":      assignee,
+        "to":        None,
+        "kind":      "tool" if body.lstrip().startswith("kanban_") else "text",
+        "body":      body,
+        "createdAt": None,    # hermes log has no per-line timestamps in v0.13.0
+    }
+
+
 def _collect_comments(reader: KanbanReader, tasks: list[dict]) -> list[dict]:
     comments: list[dict] = []
     for task in tasks[:_WS_COMMENT_TASK_LIMIT]:
@@ -58,6 +92,22 @@ def _collect_comments(reader: KanbanReader, tasks: list[dict]) -> list[dict]:
             comments.extend(reader.get_comments(tid))
     comments.sort(key=lambda c: c.get("created_at", 0))
     return comments[-_WS_COMMENT_LIMIT:]
+
+
+def _collect_logs(reader: KanbanReader, tasks: list[dict]) -> dict[str, list[dict]]:
+    """Pull worker logs only for active tasks — guardrail against subprocess
+    storms. 'Active' = status in {running, ready}, capped at _WS_LOG_TASK_LIMIT."""
+    logs: dict[str, list[dict]] = {}
+    active = [t for t in tasks if t.get("status") in ("running", "ready")][:_WS_LOG_TASK_LIMIT]
+    for t in active:
+        tid = t.get("id")
+        if not tid:
+            continue
+        assignee = t.get("assignee") or "system"
+        raw = reader.get_task_log(tid, limit=_WS_LOG_LINE_LIMIT)
+        if raw:
+            logs[tid] = [_to_log_entry(tid, assignee, i, e) for i, e in enumerate(raw)]
+    return logs
 
 
 @router.websocket("/ws/kanban/{board_slug}")
@@ -79,10 +129,12 @@ async def kanban_ws(websocket: WebSocket, board_slug: str) -> None:
                 last_mtime = mtime
                 tasks = await asyncio.to_thread(reader.list_tasks)
                 comments = await asyncio.to_thread(_collect_comments, reader, tasks)
+                logs = await asyncio.to_thread(_collect_logs, reader, tasks)
                 await websocket.send_json({
                     "type": "kanban_update",
                     "tasks": tasks,
                     "comments": comments,
+                    "logs": logs,
                 })
             await asyncio.sleep(_WS_POLL_INTERVAL_S)
     except WebSocketDisconnect:

@@ -13,6 +13,7 @@ import { MonitoringPane } from "@/components/MonitoringPane";
 import { MonacoModal } from "@/components/MonacoModal";
 import { StageBar } from "@/components/StageBar";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { useKanban } from "@/hooks/useKanban";
 import type { FileTree, LogEntry, SessionDetail, StatusSnapshot, WSMessage } from "@/types";
 import { SESSION_STATE_LABELS } from "@/lib/constants";
 
@@ -50,12 +51,33 @@ function SessionDetailInner({ name }: { name: string }) {
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [status, setStatus] = useState<StatusSnapshot | null>(null);
   const [tree, setTree] = useState<FileTree | null>(null);
-  const [entries, setEntries] = useState<LogEntry[]>([]);
+  // JSONL-driven fallback entries (pre-kanban sessions)
+  const [jsonlEntries, setJsonlEntries] = useState<LogEntry[]>([]);
   const [viewPath, setViewPath] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [wsState, setWsState] = useState<"connecting" | "open" | "closed" | "reconnecting">("connecting");
   const [searchOpen, setSearchOpen] = useState(false);
+  // Selected task for kanban chat feed (null = fall back to JSONL stream)
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const socketRef = useRef<SessionSocket | null>(null);
+
+  const boardSlug = toBoardSlug(name);
+  const { tasks, logsByTask } = useKanban(boardSlug, selectedTaskId ?? undefined);
+
+  // Auto-select the first running task when tasks load, if nothing selected yet
+  useEffect(() => {
+    if (selectedTaskId !== null) return;
+    const running = tasks.find((t) => t.status === "running");
+    if (running) setSelectedTaskId(running.id);
+  }, [tasks, selectedTaskId]);
+
+  // Resolve the entries to show in ChatStream:
+  // - If a task is selected AND that task has kanban logs → show kanban logs
+  // - Otherwise fall back to JSONL stream (pre-kanban sessions still work)
+  const activeTaskLogs = selectedTaskId ? (logsByTask[selectedTaskId] ?? null) : null;
+  const chatEntries: LogEntry[] = activeTaskLogs && activeTaskLogs.length > 0
+    ? activeTaskLogs
+    : jsonlEntries;
 
   useEffect(() => {
     async function load() {
@@ -68,7 +90,7 @@ function SessionDetailInner({ name }: { name: string }) {
         setDetail(d);
         setStatus(d.status);
         setTree(t);
-        setEntries(logs.entries);
+        setJsonlEntries(logs.entries);
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
           toast.error("세션을 찾을 수 없습니다");
@@ -88,12 +110,12 @@ function SessionDetailInner({ name }: { name: string }) {
     const offState = sock.onState((s) => setWsState(s));
     const off = sock.on((msg: WSMessage) => {
       if (msg.type === "log") {
-        setEntries((prev) => [...prev, msg.entry]);
+        setJsonlEntries((prev) => [...prev, msg.entry]);
       } else if (msg.type === "status") {
         setStatus(msg.status);
       } else if (msg.type === "reset") {
         toast.info(`로그 회전 감지 — 재로드 (${msg.reason})`);
-        api.getLogs(name, { limit: 200 }).then((p) => setEntries(p.entries)).catch(() => {});
+        api.getLogs(name, { limit: 200 }).then((p) => setJsonlEntries(p.entries)).catch(() => {});
       }
     });
     sock.connect();
@@ -164,11 +186,15 @@ function SessionDetailInner({ name }: { name: string }) {
           {tree && <FileTreePane root={tree.root} onPick={(p) => { setViewPath(p); setViewerOpen(true); }} />}
         </aside>
         <section className="overflow-hidden">
-          <ChatStream entries={entries} searchOpen={searchOpen} onCloseSearch={() => setSearchOpen(false)} />
+          <ChatStream entries={chatEntries} searchOpen={searchOpen} onCloseSearch={() => setSearchOpen(false)} />
         </section>
         <aside className="hidden border-l border-border bg-card lg:flex lg:flex-col">
           <div className="flex-1 overflow-y-auto border-b border-border">
-            <KanbanBoard boardSlug={toBoardSlug(name)} />
+            <KanbanBoard
+              boardSlug={boardSlug}
+              selectedTaskId={selectedTaskId ?? undefined}
+              onTaskSelect={setSelectedTaskId}
+            />
           </div>
           <div className="shrink-0">
             <MonitoringPane session={name} queues={status?.queues ?? {}} />

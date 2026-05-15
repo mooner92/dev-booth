@@ -106,6 +106,62 @@ class KanbanReader:
                 )
             ]
 
+    # ------------------------------------------------------------ runs
+    def get_runs(self, task_id: str) -> list[dict[str, Any]]:
+        """Per-attempt outcomes from ``hermes kanban runs`` (plaintext on v0.13.0).
+
+        Each non-empty header-stripped row becomes ``{"attempt", "outcome",
+        "profile", "elapsed", "started"}``; an indented detail line ('✖ ...')
+        attaches as ``detail`` to the preceding attempt.
+        """
+        out = self._run("--board", self.board_slug, "runs", task_id)
+        if not out:
+            return []
+        runs: list[dict[str, Any]] = []
+        for line in out.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            # data row: leading attempt index, then OUTCOME PROFILE ELAPSED STARTED ...
+            parts = stripped.split(maxsplit=4)
+            if parts and parts[0].isdigit() and len(parts) >= 5:
+                runs.append({
+                    "attempt": int(parts[0]),
+                    "outcome": parts[1].strip("()"),
+                    "profile": parts[2],
+                    "elapsed": parts[3],
+                    "started": parts[4],
+                })
+            elif runs and (stripped.startswith("✖") or stripped.startswith("•")):
+                runs[-1]["detail"] = stripped.lstrip("✖• ").strip()
+        return runs
+
+    # ----------------------------------------------------- per-task log
+    def get_task_log(self, task_id: str, tail_bytes: int = 4096,
+                     limit: int = 50) -> list[dict[str, Any]]:
+        """Worker transcript from ``hermes kanban log`` (plaintext, v0.13.0).
+
+        Returns the most-recent ``limit`` non-empty, non-decoration lines as
+        primitive ``{"line": str}`` dicts; the router projects them into
+        LogEntry with ``from = task.assignee``.
+        """
+        out = self._run("--board", self.board_slug, "log",
+                        "--tail", str(tail_bytes), task_id)
+        if not out:
+            return []
+        cleaned: list[dict[str, Any]] = []
+        for raw in out.splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            # Strip box-drawing prefix / suffix used by the hermes pretty-printer.
+            line = line.strip("╭╮╯╰─│┊╞╡")
+            line = line.lstrip("⚕📋💻⚡🔍✓✖• ").strip()
+            if not line:
+                continue
+            cleaned.append({"line": line})
+        return cleaned[-limit:]
+
     # ----------------------------------------------------------- stats
     def get_board_stats(self) -> dict[str, int]:
         """Per-status task counts. SQLite COUNT (the CLI `stats` verb has no

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { WS_RECONNECT_BACKOFF_MS } from "@/lib/constants";
+import type { LogEntry } from "@/types";
 
 // ── Types mirroring the backend contract ─────────────────────────────────────
 
@@ -45,11 +46,17 @@ export interface KanbanStats {
   done: number;
 }
 
+export type KanbanConnectionState = "open" | "connecting" | "closed";
+
 export interface UseKanbanResult {
   tasks: KanbanTask[];
   comments: KanbanComment[];
   stats: KanbanStats | null;
+  /** @deprecated use connectionState instead */
   connected: boolean;
+  connectionState: KanbanConnectionState;
+  /** per-task log entries merged from WS kanban_update pushes and optional REST prefetch */
+  logsByTask: Record<string, LogEntry[]>;
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
@@ -72,37 +79,58 @@ function kanbanWsUrl(boardSlug: string): string {
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-export function useKanban(boardSlug: string): UseKanbanResult {
+export function useKanban(
+  boardSlug: string,
+  selectedTaskId?: string,
+): UseKanbanResult {
   const [tasks, setTasks] = useState<KanbanTask[]>([]);
   const [comments, setComments] = useState<KanbanComment[]>([]);
   const [stats, setStats] = useState<KanbanStats | null>(null);
-  const [connected, setConnected] = useState(false);
+  const [connectionState, setConnectionState] = useState<KanbanConnectionState>("connecting");
+  const [logsByTask, setLogsByTask] = useState<Record<string, LogEntry[]>>({});
 
   const alive = useRef(true);
   const attempt = useRef(0);
   const wsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initial REST load
+  // Initial REST load — tasks + stats; logs come via next WS push.
+  // If selectedTaskId is provided, also prefetch that task's log immediately.
   useEffect(() => {
     if (!boardSlug) return;
     let cancelled = false;
-    Promise.all([
+    const fetches: [
+      Promise<{ tasks: KanbanTask[] }>,
+      Promise<KanbanStats>,
+      Promise<{ messages: LogEntry[]; runs: unknown[] } | null>,
+    ] = [
       apiFetch<{ tasks: KanbanTask[] }>(`/api/kanban/boards/${encodeURIComponent(boardSlug)}/tasks`),
       apiFetch<KanbanStats>(`/api/kanban/boards/${encodeURIComponent(boardSlug)}/stats`),
-    ])
-      .then(([taskRes, statsRes]) => {
+      selectedTaskId
+        ? apiFetch<{ messages: LogEntry[]; runs: unknown[] }>(
+            `/api/kanban/boards/${encodeURIComponent(boardSlug)}/tasks/${encodeURIComponent(selectedTaskId)}/log`,
+          ).catch(() => null) // REST log prefetch is best-effort
+        : Promise.resolve(null),
+    ];
+    Promise.all(fetches)
+      .then(([taskRes, statsRes, logRes]) => {
         if (cancelled) return;
         setTasks(taskRes.tasks);
         setStats(statsRes);
+        if (logRes && selectedTaskId) {
+          setLogsByTask((prev) => ({
+            ...prev,
+            [selectedTaskId]: logRes.messages ?? [],
+          }));
+        }
       })
       .catch((err) => {
         if (!cancelled) console.error("[useKanban] REST prefetch failed:", err);
       });
     return () => { cancelled = true; };
-  }, [boardSlug]);
+  }, [boardSlug, selectedTaskId]);
 
-  // WebSocket with reconnect
+  // WebSocket with exponential-backoff reconnect
   const openWs = useCallback(() => {
     if (!alive.current || !boardSlug) return;
 
@@ -111,20 +139,29 @@ export function useKanban(boardSlug: string): UseKanbanResult {
 
     ws.onopen = () => {
       attempt.current = 0;
-      setConnected(true);
+      setConnectionState("open");
     };
 
     ws.onmessage = (evt) => {
-      let msg: { type: string; tasks?: KanbanTask[]; comments?: KanbanComment[] };
+      let msg: {
+        type: string;
+        tasks?: KanbanTask[];
+        comments?: KanbanComment[];
+        logs?: Record<string, LogEntry[]>;
+      };
       try { msg = JSON.parse(evt.data as string); } catch { return; }
       if (msg.type === "kanban_update") {
         if (msg.tasks) setTasks(msg.tasks);
         if (msg.comments) setComments(msg.comments);
+        if (msg.logs) {
+          // 새 로그를 기존 맵에 머지 (WS payload가 완전한 최신 스냅샷이므로 덮어쓰기)
+          setLogsByTask((prev) => ({ ...prev, ...msg.logs }));
+        }
       }
     };
 
     ws.onclose = () => {
-      setConnected(false);
+      setConnectionState("closed");
       if (!alive.current) return;
       const backoff = WS_RECONNECT_BACKOFF_MS[
         Math.min(attempt.current, WS_RECONNECT_BACKOFF_MS.length - 1)
@@ -143,6 +180,7 @@ export function useKanban(boardSlug: string): UseKanbanResult {
     if (!boardSlug) return;
     alive.current = true;
     attempt.current = 0;
+    setConnectionState("connecting");
     openWs();
     return () => {
       alive.current = false;
@@ -152,5 +190,12 @@ export function useKanban(boardSlug: string): UseKanbanResult {
     };
   }, [boardSlug, openWs]);
 
-  return { tasks, comments, stats, connected };
+  return {
+    tasks,
+    comments,
+    stats,
+    connected: connectionState === "open",
+    connectionState,
+    logsByTask,
+  };
 }

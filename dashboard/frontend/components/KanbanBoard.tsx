@@ -5,6 +5,9 @@ import { useKanban, type KanbanTask, type KanbanStats, type TaskStatus } from "@
 import { AGENT_COLORS, AGENT_LABELS } from "@/lib/constants";
 import { Circle } from "lucide-react";
 
+// KanbanBoard는 SessionDetailClient에서 selectedTaskId/onTaskSelect를 받아
+// 태스크 클릭 시 채팅 피드를 전환할 수 있게 한다.
+
 // ── Status config ─────────────────────────────────────────────────────────────
 
 const STATUS_ORDER: TaskStatus[] = [
@@ -80,12 +83,29 @@ function RunningDot() {
 
 // ── Task card ─────────────────────────────────────────────────────────────────
 
-function TaskCard({ task }: { task: KanbanTask }) {
+function TaskCard({
+  task,
+  selected,
+  onSelect,
+}: {
+  task: KanbanTask;
+  selected: boolean;
+  onSelect: (id: string) => void;
+}) {
   const agentColor = task.assignee ? (AGENT_COLORS[task.assignee] ?? "#6B7280") : "#6B7280";
   const agentLabel = task.assignee ? (AGENT_LABELS[task.assignee] ?? task.assignee) : null;
 
   return (
-    <div className="rounded border border-border bg-background px-3 py-2.5 shadow-card space-y-1.5">
+    <button
+      type="button"
+      onClick={() => onSelect(task.id)}
+      className={cn(
+        "w-full text-left rounded border bg-background px-3 py-2.5 shadow-card space-y-1.5 transition-colors",
+        selected
+          ? "border-brand ring-1 ring-brand/40"
+          : "border-border hover:border-muted-foreground/40",
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <span className="text-sm font-medium leading-snug text-foreground line-clamp-2">
           {task.title}
@@ -106,13 +126,23 @@ function TaskCard({ task }: { task: KanbanTask }) {
           {agentLabel}
         </div>
       )}
-    </div>
+    </button>
   );
 }
 
 // ── Column ────────────────────────────────────────────────────────────────────
 
-function Column({ status, tasks }: { status: TaskStatus; tasks: KanbanTask[] }) {
+function Column({
+  status,
+  tasks,
+  selectedTaskId,
+  onTaskSelect,
+}: {
+  status: TaskStatus;
+  tasks: KanbanTask[];
+  selectedTaskId?: string;
+  onTaskSelect: (id: string) => void;
+}) {
   if (tasks.length === 0) return null;
   return (
     <div className="space-y-2">
@@ -122,9 +152,14 @@ function Column({ status, tasks }: { status: TaskStatus; tasks: KanbanTask[] }) 
         </span>
         <span className="text-xs text-muted-foreground">{tasks.length}</span>
       </div>
-      <div className="space-y-2">
+      <div className="overflow-y-auto max-h-[calc(100vh-220px)] space-y-2 pr-0.5 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
         {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} />
+          <TaskCard
+            key={task.id}
+            task={task}
+            selected={task.id === selectedTaskId}
+            onSelect={onTaskSelect}
+          />
         ))}
       </div>
     </div>
@@ -133,7 +168,15 @@ function Column({ status, tasks }: { status: TaskStatus; tasks: KanbanTask[] }) 
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function KanbanBoard({ boardSlug }: { boardSlug: string }) {
+export function KanbanBoard({
+  boardSlug,
+  selectedTaskId,
+  onTaskSelect,
+}: {
+  boardSlug: string;
+  selectedTaskId?: string;
+  onTaskSelect?: (id: string) => void;
+}) {
   const { tasks, stats, connected } = useKanban(boardSlug);
 
   const grouped = STATUS_ORDER.reduce<Record<TaskStatus, KanbanTask[]>>(
@@ -162,7 +205,13 @@ export function KanbanBoard({ boardSlug }: { boardSlug: string }) {
       ) : (
         <div className="space-y-4">
           {STATUS_ORDER.map((status) => (
-            <Column key={status} status={status} tasks={grouped[status]} />
+            <Column
+              key={status}
+              status={status}
+              tasks={grouped[status]}
+              selectedTaskId={selectedTaskId}
+              onTaskSelect={onTaskSelect ?? (() => {})}
+            />
           ))}
         </div>
       )}
