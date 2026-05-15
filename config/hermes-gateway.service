@@ -1,0 +1,25 @@
+[Unit]
+Description=Hermes Agent Gateway (Dev-Booth)
+After=network.target
+# vLLM이 먼저 떠야 함 (포트 8003)
+After=vllm-qwen25-coder-32b.service
+Wants=vllm-qwen25-coder-32b.service
+
+[Service]
+Type=simple
+User=mooner92
+WorkingDirectory=/home/mooner92
+Environment="HOME=/home/mooner92"
+Environment="PATH=/home/mooner92/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="DEV_BOOTH_DRYRUN=1"
+# GITHUB_TOKEN 제거 (dryrun 3중 레이어 Layer 3)
+Environment="GITHUB_TOKEN="
+Environment="GH_TOKEN="
+EnvironmentFile=-/dev-booth/config/.env
+ExecStart=/home/mooner92/.local/bin/hermes gateway run
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
