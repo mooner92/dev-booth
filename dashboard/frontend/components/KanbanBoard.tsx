@@ -152,7 +152,7 @@ function Column({
         </span>
         <span className="text-xs text-muted-foreground">{tasks.length}</span>
       </div>
-      <div className="overflow-y-auto max-h-[calc(100vh-220px)] space-y-2 pr-0.5 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+      <div className="space-y-2 pr-0.5">
         {tasks.map((task) => (
           <TaskCard
             key={task.id}

@@ -57,6 +57,8 @@ export interface UseKanbanResult {
   connectionState: KanbanConnectionState;
   /** per-task log entries merged from WS kanban_update pushes and optional REST prefetch */
   logsByTask: Record<string, LogEntry[]>;
+  /** v6: board-wide team timeline, server-projected LogEntry[] from kanban_comment() calls */
+  timeline: LogEntry[];
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
@@ -88,6 +90,7 @@ export function useKanban(
   const [stats, setStats] = useState<KanbanStats | null>(null);
   const [connectionState, setConnectionState] = useState<KanbanConnectionState>("connecting");
   const [logsByTask, setLogsByTask] = useState<Record<string, LogEntry[]>>({});
+  const [timeline, setTimeline] = useState<LogEntry[]>([]);
 
   const alive = useRef(true);
   const attempt = useRef(0);
@@ -127,6 +130,14 @@ export function useKanban(
       .catch((err) => {
         if (!cancelled) console.error("[useKanban] REST prefetch failed:", err);
       });
+
+    // v6: prefetch board-wide timeline (best-effort, independent of task selection)
+    apiFetch<{ entries: LogEntry[] }>(
+      `/api/kanban/boards/${encodeURIComponent(boardSlug)}/timeline`,
+    )
+      .then((r) => { if (!cancelled) setTimeline(r.entries); })
+      .catch((err) => console.warn("[useKanban] timeline prefetch failed:", err));
+
     return () => { cancelled = true; };
   }, [boardSlug, selectedTaskId]);
 
@@ -148,6 +159,7 @@ export function useKanban(
         tasks?: KanbanTask[];
         comments?: KanbanComment[];
         logs?: Record<string, LogEntry[]>;
+        timeline?: LogEntry[];
       };
       try { msg = JSON.parse(evt.data as string); } catch { return; }
       if (msg.type === "kanban_update") {
@@ -157,6 +169,8 @@ export function useKanban(
           // 새 로그를 기존 맵에 머지 (WS payload가 완전한 최신 스냅샷이므로 덮어쓰기)
           setLogsByTask((prev) => ({ ...prev, ...msg.logs }));
         }
+        // v6: server already projects timeline to LogEntry shape — overwrite directly
+        if (msg.timeline) setTimeline(msg.timeline);
       }
     };
 
@@ -197,5 +211,6 @@ export function useKanban(
     connected: connectionState === "open",
     connectionState,
     logsByTask,
+    timeline,
   };
 }

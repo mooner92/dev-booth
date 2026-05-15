@@ -2,11 +2,14 @@
 
 export interface LogEntry {
   id?: string | null;
-  /** 'tool' | 'text' for kanban task logs; legacy logs may carry other strings */
-  kind?: "tool" | "text" | string | null;
+  /** 'tool' | 'text' for kanban task logs; 'comment' for team timeline; legacy logs may carry other strings */
+  kind?: "tool" | "text" | "comment" | string | null;
   from?: string | null;
   to?: string | null;
   body?: string | null;
+  /** v6: comment → originating task identity for the tab label / badge */
+  task_id?: string | null;
+  task_title?: string | null;
   refs?: Record<string, unknown> | null;
   priority?: number | null;
   createdAt?: string | null;
@@ -112,4 +115,6 @@ export interface KanbanWSUpdate {
   comments?: import("@/hooks/useKanban").KanbanComment[];
   /** per-task log entries; keys are task IDs; ≤5 active tasks × ≤50 entries */
   logs?: Record<string, LogEntry[]>;
+  /** v6: board-wide team timeline, server-projected to LogEntry shape (≤100 entries) */
+  timeline?: LogEntry[];
 }

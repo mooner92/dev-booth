@@ -3,6 +3,7 @@
 import type { LogEntry } from "@/types";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { AGENT_COLORS, AGENT_LABELS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict, parseISO } from "date-fns";
 import { ko } from "date-fns/locale";
 import ReactMarkdown from "react-markdown";
@@ -24,13 +25,19 @@ export function ChatMessage({ entry }: { entry: LogEntry }) {
     }
   }, [ts]);
   const [showAbsolute, setShowAbsolute] = useState(false);
+  const isComment = entry.kind === "comment";
 
   return (
-    <div className="flex items-start gap-3 px-4 py-2.5">
+    <div className={cn("flex items-start gap-3 px-4 py-2.5", isComment && "bg-muted/30")}>
       <AgentAvatar agent={agent} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold" style={{ color }}>{label}</span>
+          {isComment && entry.task_title && (
+            <span className="ml-2 rounded bg-card border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              {entry.task_title}
+            </span>
+          )}
           {entry.to && (
             <span className="text-xs text-muted-foreground">→ {AGENT_LABELS[entry.to] ?? entry.to}</span>
           )}

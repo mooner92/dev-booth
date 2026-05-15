@@ -62,7 +62,8 @@ function SessionDetailInner({ name }: { name: string }) {
   const socketRef = useRef<SessionSocket | null>(null);
 
   const boardSlug = toBoardSlug(name);
-  const { tasks, logsByTask } = useKanban(boardSlug, selectedTaskId ?? undefined);
+  const { tasks, logsByTask, timeline } = useKanban(boardSlug, selectedTaskId ?? undefined);
+  const selectedTaskTitle = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId)?.title : undefined;
 
   // Auto-select the first running task when tasks load, if nothing selected yet
   useEffect(() => {
@@ -181,14 +182,21 @@ function SessionDetailInner({ name }: { name: string }) {
           </div>
         </div>
       )}
-      <div className="grid flex-1 overflow-hidden lg:grid-cols-[280px_1fr_320px]">
+      <div className="grid flex-1 min-h-0 overflow-hidden lg:grid-cols-[280px_1fr_320px]">
         <aside className="hidden border-r border-border bg-card lg:block">
           {tree && <FileTreePane root={tree.root} onPick={(p) => { setViewPath(p); setViewerOpen(true); }} />}
         </aside>
-        <section className="overflow-hidden">
-          <ChatStream entries={chatEntries} searchOpen={searchOpen} onCloseSearch={() => setSearchOpen(false)} />
+        <section className="overflow-hidden min-h-0">
+          <ChatStream
+            entries={chatEntries}
+            timeline={timeline}
+            selectedTaskId={selectedTaskId ?? undefined}
+            selectedTaskTitle={selectedTaskTitle}
+            searchOpen={searchOpen}
+            onCloseSearch={() => setSearchOpen(false)}
+          />
         </section>
-        <aside className="hidden border-l border-border bg-card lg:flex lg:flex-col">
+        <aside className="hidden border-l border-border bg-card lg:flex lg:flex-col min-h-0">
           <div className="flex-1 overflow-y-auto border-b border-border">
             <KanbanBoard
               boardSlug={boardSlug}
