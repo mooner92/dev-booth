@@ -1,0 +1,49 @@
+# Dev-Booth Stabilization v5 — Ralph progress
+
+## Plan
+/dev-booth/reports/plans/2026_05_15_05-18-41_devbooth_stabilization_v5.md
+
+## v4 carry-over (informational; not v5 scope)
+- 3 v4 commits local on feat/kanban-redesign-2026-05-14 not yet pushed (operator gated).
+- v4 docs/rename done; firebase-001 still on disk; hermes-gateway runs B1 (sudo unavailable).
+
+## v5 status (iteration 1)
+- Plan written; PRD scaffolded for US-001..US-006.
+
+## v5 status (iteration 4 — current)
+
+### Done
+- US-001 Phase 0: 9 probes → /tmp/v5-phase0.md + reports/results/2026_05_15_05-28-17_devbooth_v5_phase0_probes.md.
+  Key findings: vLLM max_model_len=32768 (confirms 28K ctx target); `hermes kanban log` AND `runs`
+  subcommands exist on v0.13.0 (plaintext only); workspace path varies (~/.hermes/.../workspaces/<id>/
+  or ~/.worktrees/<id>/ — bodies must use $HERMES_KANBAN_WORKSPACE env var); pytest baseline 78.
+  Commit: 08dd7a7.
+- US-002 Phase 1: max_turns 40→15, context_length 65536→28000 on all 3 profiles (regex-targeted at
+  agent: and model: blocks; personalities.max_turns:20 left alone). SOUL.md ⚠️ block prepended to
+  ~/.hermes/profiles/<p>/SOUL.md and core/souls/<p>.SOUL.md. config.yaml + SOUL.md backups at
+  /tmp/v5-backup/. Commit: 4deb5c0.
+- US-003 Phase 2: all 12 STAGE_DAG bodies rewritten with v5 skeleton (작업/환경 정보/단계/체크리스트/
+  ⚠️ 완료 시/막힐 때). session.py ctx adds session_path. New tests/test_scenario_bodies.py (41 tests
+  across the 12 stages) asserts kanban_complete + 환경 정보 + block pathway. Existing test_scenario.py
+  updated for session_path. Commit: 6234c38.
+- US-004 Phase 3 backend: kanban_reader.get_runs + get_task_log; routers/kanban.py /log endpoint +
+  WS payload .logs (≤5 active tasks × ≤50 entries) with assignee from task.assignee (not regex).
+  Tests in dashboard/backend/tests/test_kanban_reader.py (7 new). Pytest: 135 passing total.
+  (Frontend wiring in flight via executor sub-agent.)
+- US-005 Phase 4: core/watchdog.py — reap_protocol_violations(board) — diagnostic backstop. CLI
+  `python -m core.watchdog --board <slug> [--dry-run]`. tests/test_watchdog.py (9 tests, all pass).
+  Smoke: `python -m core.watchdog --board e2e-kanban-001 --dry-run` → reaped=0 (clean board).
+
+### Pending
+- Phase 3 frontend (running): useKanban logsByTask + scrollable KanbanBoard columns + ChatStream
+  wiring in SessionDetailClient.
+- US-006 Phase 5: per-phase commits (phase3 once frontend lands; phase4; docs), results report,
+  surface operator block (push + sudo dashboard restart + watchdog timer install).
+
+## Learnings
+- `hermes kanban log <task_id>` IS available on v0.13.0 — plaintext (no --json). Box-drawing chars
+  need stripping before pushing to the ChatStream.
+- Hermes records protocol_violation as runs.outcome='crashed' with explicit diagnostic; auto-blocks
+  after failure_limit:2. Watchdog is therefore diagnostic, not primary enforcement.
+- Stage-1 sub-tasks created by conductor were dropping the repo URL (`example/firebase-app`
+  appeared in t_8256e2a9 log). v5 bodies fix this by explicitly carrying clone_path in metadata.
