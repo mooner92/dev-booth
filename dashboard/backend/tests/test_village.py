@@ -90,17 +90,11 @@ def test_status_mapping_running_executing(boards_root):
     assert conductor["task"] == "orchestrate"
 
 
-def test_status_mapping_ready_syncing(boards_root):
-    """architect's only task is ready → village state 'syncing', area 'hallway'.
-    Picker has no running/blocked/done for architect → falls through to None,
-    but the task IS 'ready', so we need a running/blocked/done preference; the
-    architect task is 'ready' (not running/blocked/done), so picker returns None
-    and the agent is idle. This documents that behaviour."""
+def test_picker_skips_ready_tasks(boards_root):
+    """The picker prefers running > blocked > done. 'ready' (queued) is skipped,
+    so an agent whose only task is ready shows as idle in the breakroom."""
     state = vs.get_village_state("demo-board")
     architect = state["agents"]["architect"]
-    # ready isn't in the (running|blocked|done) picker preference list, so
-    # architect falls back to idle. This is intentional — the picker mirrors
-    # "what is the agent doing right now?", and 'ready' means queued.
     assert architect["task_status"] == "idle"
     assert architect["state"] == "idle"
     assert architect["area"] == "breakroom"

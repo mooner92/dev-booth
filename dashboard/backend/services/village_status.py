@@ -1,29 +1,8 @@
-"""Village pixel-office state projector.
+"""Project a Hermes Kanban board into the Village pixel-office shape.
 
-Reads the Hermes Kanban board through :class:`KanbanReader` (CLI-first with the
-SQLite fallback documented in services/kanban_reader.py) and projects task
-status into a UI-friendly shape consumed by ``app/village/page.tsx``.
-
-Output schema::
-
-    {
-      "board":    str,
-      "progress": int (0-100),
-      "done":     int,
-      "total":    int,
-      "agents": {
-        "<agent>": {
-          "state":       str,    # village state (executing/syncing/idle/error)
-          "task":        str,    # current task title, slug prefix stripped
-          "task_status": str,    # raw kanban status (running/blocked/done/...)
-          "area":        str,    # desk/hallway/breakroom
-          "emoji":       str,
-          "label":       str,
-          "x":           int,
-          "y":           int,
-        }, ...
-      }
-    }
+Reads through :class:`KanbanReader` (CLI-first, SQLite fallback) so this module
+adds no parallel access layer. The output shape is consumed by
+``routers/village.py`` and ``app/village/page.tsx``.
 """
 from __future__ import annotations
 
