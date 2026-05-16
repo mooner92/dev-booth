@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import config
-from .routers import github, health, kanban, metrics, sessions, ws
+from .routers import github, health, kanban, metrics, sessions, village, ws
 from .services.prometheus_proxy import PrometheusProxy
 from .services.session_hub import HubRegistry
 from .services.session_registry import SessionListCache
@@ -52,6 +52,7 @@ app.include_router(github.router)
 app.include_router(metrics.router)
 app.include_router(ws.router)
 app.include_router(kanban.router)
+app.include_router(village.router)
 
 
 # Mount frontend export if available (production single-port mode)
