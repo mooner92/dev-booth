@@ -27,7 +27,12 @@ function StatusIcon({ status }: { status: TaskStatus }) {
         </span>
       );
     case "blocked":
-      return <span className="text-amber-500">⊘</span>;
+      return (
+        <span className="relative inline-flex h-2 w-2 items-center justify-center">
+          <span className="absolute h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+          <span className="relative text-amber-500">⊘</span>
+        </span>
+      );
     case "ready":
       return <span className="text-blue-500">▶</span>;
     default:

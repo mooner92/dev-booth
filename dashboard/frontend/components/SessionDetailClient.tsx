@@ -9,6 +9,7 @@ import { SessionSocket } from "@/lib/ws";
 import { ChatStream } from "@/components/ChatStream";
 import { MonacoModal } from "@/components/MonacoModal";
 import { KanbanBoard, trimTaskTitle } from "@/components/KanbanBoard";
+import { UnblockBanner } from "@/components/UnblockBanner";
 import { useKanban } from "@/hooks/useKanban";
 import type { LogEntry, SessionDetail, StatusSnapshot, WSMessage } from "@/types";
 import { STAGE_LABELS, STAGE_ORDER } from "@/lib/constants";
@@ -67,9 +68,35 @@ function SessionDetailInner({ name }: { name: string }) {
 
   const boardSlug = toBoardSlug(name);
   const { tasks, logsByTask, timeline } = useKanban(boardSlug, selectedTaskId ?? undefined);
-  const selectedTaskTitle = selectedTaskId
-    ? tasks.find((t) => t.id === selectedTaskId)?.title
+  const selectedTask = selectedTaskId
+    ? tasks.find((t) => t.id === selectedTaskId)
     : undefined;
+  const selectedTaskTitle = selectedTask?.title;
+  const blockedTasks = useMemo(
+    () => tasks.filter((t) => t.status === "blocked"),
+    [tasks],
+  );
+  const [bulkUnblocking, setBulkUnblocking] = useState(false);
+
+  async function unblockAll() {
+    if (blockedTasks.length === 0 || bulkUnblocking) return;
+    setBulkUnblocking(true);
+    let failed = 0;
+    for (const task of blockedTasks) {
+      try {
+        await api.unblockTask(boardSlug, task.id);
+      } catch (e) {
+        failed += 1;
+        console.error("[unblockAll]", task.id, e);
+      }
+    }
+    setBulkUnblocking(false);
+    if (failed === 0) {
+      toast.success(`${blockedTasks.length}개 태스크 재시작 요청 완료`);
+    } else {
+      toast.error(`${failed}개 태스크 재시작 실패 (콘솔 확인)`);
+    }
+  }
 
   // Auto-select the first running task when tasks load, if nothing selected yet
   useEffect(() => {
@@ -227,6 +254,20 @@ function SessionDetailInner({ name }: { name: string }) {
               {currentStageName}
             </span>
             <div className="flex shrink-0 items-center gap-3">
+              {blockedTasks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={unblockAll}
+                  disabled={bulkUnblocking}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-medium text-amber-400 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="차단된 모든 태스크 재시작"
+                >
+                  <span className="animate-pulse">⊘</span>
+                  {bulkUnblocking
+                    ? "재시작 중..."
+                    : `차단된 태스크 ${blockedTasks.length}개 모두 재시작`}
+                </button>
+              )}
               <span className="text-[10px] text-muted-foreground">
                 WS:{" "}
                 {wsState === "open"
@@ -260,6 +301,19 @@ function SessionDetailInner({ name }: { name: string }) {
             </div>
           </div>
         </div>
+
+        {/* Unblock banner — only when the selected task is blocked.
+            `key={selectedTaskId}` forces a fresh mount when the user
+            switches between blocked tasks so the previous "done" state
+            doesn't bleed into the new selection. */}
+        {selectedTask?.status === "blocked" && selectedTaskId && (
+          <UnblockBanner
+            key={selectedTaskId}
+            boardSlug={boardSlug}
+            taskId={selectedTaskId}
+            taskTitle={trimTaskTitle(selectedTask.title)}
+          />
+        )}
 
         {/* Chat stream — full remaining height */}
         <div className="min-h-0 flex-1 overflow-hidden">

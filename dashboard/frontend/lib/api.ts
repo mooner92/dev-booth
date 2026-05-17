@@ -67,4 +67,9 @@ export const api = {
     goal: string;
     mode: "dryrun" | "live";
   }) => apiPost<StartSessionResponse>(`/api/sessions/start`, body),
+  unblockTask: (boardSlug: string, taskId: string) =>
+    apiPost<{ success: boolean; task_id: string; board: string; message: string }>(
+      `/api/kanban/boards/${encodeURIComponent(boardSlug)}/tasks/${encodeURIComponent(taskId)}/unblock`,
+      {},
+    ),
 };

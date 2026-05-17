@@ -1,13 +1,20 @@
-"""Kanban dashboard router (read-only) — A3-lite.
+"""Kanban dashboard router — A3-lite.
 
 Surfaces the Hermes Kanban board the agents coordinate on, so the existing
 Dev-Booth dashboard (port 7000, dashboard.excusa.uk) shows live task state +
 agent comment threads without a custom data layer.
+
+Reads come from KanbanReader (SQLite + CLI fallback). The only write is
+:func:`unblock_task` which shells to ``hermes kanban unblock`` so the
+operator can resume a stuck task from the dashboard.
 """
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import shutil
+import subprocess
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
@@ -15,6 +22,11 @@ from starlette.websockets import WebSocketState
 from ..services.kanban_reader import KANBAN_BOARDS_ROOT, KanbanReader, list_boards
 
 router = APIRouter(prefix="/api/kanban", tags=["kanban"])
+
+# Resolved once at import — falls back to ~/.local/bin/hermes (the value
+# core/session.py uses) when hermes isn't on the service PATH.
+_HERMES_BIN = shutil.which("hermes") or str(Path.home() / ".local" / "bin" / "hermes")
+_UNBLOCK_TIMEOUT_S = 10
 
 _WS_POLL_INTERVAL_S = 2.0
 _WS_COMMENT_TASK_LIMIT = 12   # tasks whose comment threads the WS pushes
@@ -27,6 +39,38 @@ _WS_TIMELINE_LIMIT = 100      # v6: team-timeline entries pushed per update
 @router.get("/boards")
 def get_boards() -> dict:
     return {"boards": list_boards()}
+
+
+@router.post("/boards/{board_slug}/tasks/{task_id}/unblock")
+def unblock_task(board_slug: str, task_id: str) -> dict:
+    """Unblock a single task by shelling to ``hermes kanban unblock``.
+
+    The dashboard's Unblock banner POSTs here to resume a stuck task. The
+    CLI is the source of truth — direct SQLite writes would race with
+    Hermes' dispatcher.
+    """
+    try:
+        result = subprocess.run(
+            [_HERMES_BIN, "kanban", "--board", board_slug, "unblock", task_id],
+            capture_output=True,
+            text=True,
+            timeout=_UNBLOCK_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="hermes unblock 타임아웃")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="hermes 명령어를 찾을 수 없음")
+
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "unblock 실패").strip()
+        raise HTTPException(status_code=400, detail=f"unblock 실패: {detail}")
+
+    return {
+        "success": True,
+        "task_id": task_id,
+        "board":   board_slug,
+        "message": (result.stdout or "").strip(),
+    }
 
 
 @router.get("/boards/{board_slug}/tasks")
