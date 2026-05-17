@@ -43,7 +43,10 @@ export function ChatMessage({ entry }: { entry: LogEntry }) {
   }, [ts]);
   const [showAbsolute, setShowAbsolute] = useState(false);
   const isComment = entry.kind === "comment";
+  const isStatusChange = entry.kind === "status_change";
   const rawBody = entry.body ?? "";
+  const isDone    = isStatusChange && rawBody.startsWith("✅");
+  const isBlocked = isStatusChange && rawBody.startsWith("⊘");
   const isToolCall =
     entry.kind === "tool" ||
     rawBody.startsWith("kanban_") ||
@@ -55,7 +58,9 @@ export function ChatMessage({ entry }: { entry: LogEntry }) {
       className={cn(
         "flex items-start gap-3 px-4 py-2.5",
         isComment && "bg-muted/30",
-        isToolCall && !isComment && "bg-muted/40",
+        isToolCall && !isComment && !isStatusChange && "bg-muted/40",
+        isDone    && "border-l-2 border-emerald-500/60 bg-emerald-500/5",
+        isBlocked && "border-l-2 border-amber-500/60 bg-amber-500/5",
       )}
     >
       <AgentAvatar agent={agent} />

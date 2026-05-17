@@ -183,6 +183,30 @@ class KanbanReader:
             ).fetchall()
         return [dict(r) for r in rows[-limit:]]
 
+    def get_status_change_events(self, limit: int = 200) -> list[dict[str, Any]]:
+        """v7: done/blocked task transitions projected as timeline events.
+
+        `tasks` has no per-status timestamp for `blocked`, so blocked events
+        use `created_at` as the event time. `done` uses `completed_at` and
+        falls back to `created_at` if the worker forgot to stamp it. Each row
+        is shaped like a comment so the router's projector treats them
+        uniformly.
+        """
+        if not self.exists:
+            return []
+        with self._connect() as c:
+            rows = c.execute(
+                "SELECT t.id AS task_id,"
+                "       t.title AS task_title,"
+                "       t.assignee AS task_assignee,"
+                "       t.status AS status,"
+                "       COALESCE(t.completed_at, t.created_at) AS event_at"
+                "  FROM tasks AS t"
+                " WHERE t.status IN ('done', 'blocked')"
+                " ORDER BY event_at ASC"
+            ).fetchall()
+        return [dict(r) for r in rows[-limit:]]
+
     # ----------------------------------------------------------- stats
     def get_board_stats(self) -> dict[str, int]:
         """Per-status task counts. SQLite COUNT (the CLI `stats` verb has no

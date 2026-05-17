@@ -1,11 +1,66 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LogEntry } from "@/types";
 import { ChatMessage } from "@/components/ChatMessage";
 import { SCROLL_ANCHOR_THRESHOLD_PX } from "@/lib/constants";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Patterns Hermes injects around tool calls / frame markers — they have no
+// reader value on the log tab. Timeline (kanban_comment + status_change) is
+// intentional 1:1 narration and gets no filtering.
+const NOISE_BODY_PATTERNS: RegExp[] = [
+  /^Hermes$/i,
+  /^tools>$/,
+  /^_response>$/,
+  /^<\/?tool_response>$/,
+  /^<\/?output>$/,
+  /^markdown>$/,
+  /^\s*$/,
+];
+
+const GROUP_WINDOW_MS = 5_000;
+
+function isNoise(body: string): boolean {
+  return NOISE_BODY_PATTERNS.some((p) => p.test(body.trim()));
+}
+
+/** Merge consecutive same-agent text entries within GROUP_WINDOW_MS into a
+ * single entry with their bodies joined by a single space. tool/comment/
+ * status_change entries are never merged — only kind in {undefined, null,
+ * "text"} qualifies. */
+function groupAndFilterEntries(entries: LogEntry[]): LogEntry[] {
+  const out: LogEntry[] = [];
+  for (const e of entries) {
+    const body = (e.body ?? "").trim();
+    if (isNoise(body)) continue;
+
+    const isPlainText = !e.kind || e.kind === "text";
+    const last = out[out.length - 1];
+    const lastIsPlainText = last && (!last.kind || last.kind === "text");
+    const lastBody = (last?.body ?? "").trim();
+
+    if (
+      last &&
+      isPlainText &&
+      lastIsPlainText &&
+      last.from === e.from &&
+      Math.abs(
+        new Date(e.createdAt ?? 0).getTime() -
+          new Date(last.createdAt ?? 0).getTime(),
+      ) < GROUP_WINDOW_MS
+    ) {
+      out[out.length - 1] = {
+        ...last,
+        body: lastBody ? `${lastBody} ${body}` : body,
+      };
+      continue;
+    }
+    out.push({ ...e, body });
+  }
+  return out;
+}
 
 // v10: dropped @tanstack/react-virtual in favor of a plain flex-column map.
 // The WS payload caps timelines at 100 entries and per-task logs at 50, so
@@ -36,7 +91,13 @@ export function ChatStream({
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeTab, setActiveTab] = useState<"timeline" | "log">("timeline");
 
-  const activeEntries = activeTab === "timeline" ? timeline : entries;
+  // Timeline stays raw (kanban_comment + status_change are intentional 1:1
+  // narration); only the log tab gets grouping + noise filtering.
+  const rawEntries = activeTab === "timeline" ? timeline : entries;
+  const activeEntries = useMemo(
+    () => (activeTab === "log" ? groupAndFilterEntries(rawEntries) : rawEntries),
+    [activeTab, rawEntries],
+  );
   const q = query.toLowerCase();
   const filtered = q
     ? activeEntries.filter((e) => (e.body ?? "").toLowerCase().includes(q))

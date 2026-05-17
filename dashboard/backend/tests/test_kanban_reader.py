@@ -250,20 +250,33 @@ def test_get_all_comments_limit(boards_root):
 
 
 def test_route_timeline_projects_to_log_entry(client):
-    """/timeline projects every row through _comment_to_log_entry server-side."""
+    """/timeline projects every comment + every done/blocked task transition
+    through the server-side projectors, chronologically merged.
+
+    The demo-board fixture has 3 comments and 2 terminal-status tasks
+    (t_01=done, t_09=blocked), so the merged timeline has 5 entries.
+    """
     resp = client.get("/api/kanban/boards/demo-board/timeline")
     assert resp.status_code == 200
     entries = resp.json()["entries"]
-    assert len(entries) == 3
-    first = entries[0]
-    assert first["kind"] == "comment"
-    assert first["to"] == "all"
-    assert first["from"] in ("conductor", "architect")
-    assert "task_title" in first and "task_id" in first
-    # createdAtMs derives from seconds-epoch (×1000)
-    assert isinstance(first["createdAtMs"], int) and first["createdAtMs"] > 0
-    # createdAt is an ISO-8601 UTC string
-    assert isinstance(first["createdAt"], str) and "T" in first["createdAt"]
+    assert len(entries) == 5
+    kinds = {e["kind"] for e in entries}
+    assert "comment" in kinds and "status_change" in kinds
+    # Every entry has the comment-shape contract
+    for e in entries:
+        assert e["to"] == "all"
+        assert e["from"], f"missing from on {e}"
+        assert "task_title" in e and "task_id" in e
+        assert isinstance(e["createdAtMs"], int) and e["createdAtMs"] > 0
+        assert isinstance(e["createdAt"], str) and "T" in e["createdAt"]
+    # Done event body carries the ✅ marker; blocked carries the ⊘ marker
+    done = next(e for e in entries if e["kind"] == "status_change" and e["body"].startswith("✅"))
+    blocked = next(e for e in entries if e["kind"] == "status_change" and e["body"].startswith("⊘"))
+    assert "fork & clone" in done["body"]
+    assert "code review" in blocked["body"]
+    # Chronologically merged (createdAtMs non-decreasing)
+    ts = [e["createdAtMs"] for e in entries]
+    assert ts == sorted(ts)
 
 
 def test_route_timeline_unknown_board_404(client):

@@ -88,12 +88,13 @@ def _to_log_entry(task_id: str, assignee: str, idx: int, raw: dict) -> dict:
 # ----------------------------------------------------- v6: team timeline
 @router.get("/boards/{board_slug}/timeline")
 def get_timeline(board_slug: str, limit: int = 200) -> dict:
-    """v6: aggregate every kanban_comment on the board, oldest-first, projected
-    to LogEntry shape. Powers the dashboard's '팀 타임라인' tab."""
+    """v6/v7: aggregate every kanban_comment + task done/blocked transition on
+    the board, oldest-first, projected to LogEntry shape. Powers the
+    dashboard's '팀 타임라인' tab."""
     reader = KanbanReader(board_slug)
     if not reader.exists:
         raise HTTPException(status_code=404, detail=f"board {board_slug!r} not found")
-    return {"entries": [_comment_to_log_entry(r) for r in reader.get_all_comments(limit=limit)]}
+    return {"entries": _collect_timeline(reader, limit=limit)}
 
 
 def _comment_to_log_entry(row: dict) -> dict:
@@ -113,6 +114,33 @@ def _comment_to_log_entry(row: dict) -> dict:
     }
 
 
+def _status_event_to_log_entry(row: dict) -> dict:
+    """Project a done/blocked task row into the LogEntry shape
+    (kind='status_change'). Mirrors comment shape so the frontend timeline
+    renders both event types side-by-side."""
+    tid = row.get("task_id")
+    ts = row.get("event_at")
+    status = row.get("status") or ""
+    title = row.get("task_title") or ""
+    if status == "done":
+        body = f"✅ 완료: {title}"
+    elif status == "blocked":
+        body = f"⊘ 차단됨: {title}"
+    else:
+        body = f"{status}: {title}"
+    return {
+        "id":          f"status-{status}-{tid}",
+        "from":        row.get("task_assignee") or "system",
+        "to":          "all",
+        "kind":        "status_change",
+        "body":        body,
+        "task_id":     tid,
+        "task_title":  title,
+        "createdAt":   _epoch_to_iso(ts),
+        "createdAtMs": (int(ts) if ts else 0) * 1000,
+    }
+
+
 def _epoch_to_iso(ts) -> str | None:
     """seconds-epoch → ISO-8601 UTC string, or None on missing input."""
     if ts is None:
@@ -122,8 +150,13 @@ def _epoch_to_iso(ts) -> str | None:
 
 
 def _collect_timeline(reader: KanbanReader, limit: int = _WS_TIMELINE_LIMIT) -> list[dict]:
-    """WS-bounded timeline projection — see plan §4.2."""
-    return [_comment_to_log_entry(r) for r in reader.get_all_comments(limit=limit)]
+    """WS-bounded timeline projection — comments + done/blocked status events,
+    merged in chronological order."""
+    events: list[dict] = []
+    events.extend(_comment_to_log_entry(r) for r in reader.get_all_comments(limit=limit))
+    events.extend(_status_event_to_log_entry(r) for r in reader.get_status_change_events(limit=limit))
+    events.sort(key=lambda e: e.get("createdAtMs") or 0)
+    return events[-limit:]
 
 
 def _collect_comments(reader: KanbanReader, tasks: list[dict]) -> list[dict]:
