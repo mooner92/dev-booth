@@ -58,7 +58,11 @@ def test_setup_skips_board_create_if_exists(sess):
 
 
 # --------------------------------------------------------------------- seed
-def test_seed_creates_twelve_tasks_with_parent_links(sess):
+def test_seed_creates_all_stage_tasks_with_parent_links(sess):
+    """v6: seed creates one Kanban task per stage in STAGE_DAG (21 stages)."""
+    from core.scenario import STAGE_DAG
+    expected_len = len(STAGE_DAG)
+
     sess.session_path.mkdir(parents=True, exist_ok=True)
     (sess.session_path / "log").mkdir(exist_ok=True)
     seen_args = []
@@ -73,18 +77,15 @@ def test_seed_creates_twelve_tasks_with_parent_links(sess):
          mock.patch.object(sess, "_kanban", return_value=""):
         stage_map = sess.seed()
 
-    assert len(stage_map) == 12
-    # every create call: --board comes BEFORE the `create` subcommand (Phase 0 fix)
+    assert len(stage_map) == expected_len
     for args in seen_args:
         assert args[0] == "--board" and args[1] == "test-sess" and args[2] == "create", args
         assert "--idempotency-key" in args
         assert "--workspace" in args and "worktree" in args
-    # stage 2 depends on stage 1 → its create call carries --parent t_01
     stage2_args = seen_args[1]
     assert "--parent" in stage2_args and "t_01" in stage2_args
-    # stage_task_map.json written
     written = json.loads((sess.session_path / "stage_task_map.json").read_text())
-    assert len(written) == 12
+    assert len(written) == expected_len
 
 
 def test_seed_raises_on_unknown_assignee(sess, monkeypatch):
