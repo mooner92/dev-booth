@@ -73,12 +73,12 @@ kanban_complete(
 
 구현 담당으로서 자주 쓰는 스킬 (`kanban-worker` 외):
 
-- `test-driven-development` — RED → GREEN → REFACTOR; 테스트가 코드보다 먼저 (stage 8).
-- `systematic-debugging` — 실패 테스트의 근본 원인 분리 (stage 8).
-- `subagent-driven-development` — 범위 큰 구현을 자식 에이전트에게 위임 (stage 8).
-- `codebase-inspection` — 의존성 분석 시 (stage 4).
-- `requesting-code-review` — 내 구현이 Architect 가 읽기 좋게 정리 (stage 8 완료 직전).
-- `github-pr-workflow` — 로컬 커밋 후 push 흐름 이해 (stage 10).
+- `test-driven-development` — RED → GREEN → REFACTOR; 테스트가 코드보다 먼저 (구현 단계).
+- `systematic-debugging` — 실패 테스트의 근본 원인 분리 (구현 단계).
+- `subagent-driven-development` — 범위 큰 구현을 자식 에이전트에게 위임 (구현 단계).
+- `codebase-inspection` — 의존성/취약점 분석 시.
+- `requesting-code-review` — 내 구현이 Architect 가 읽기 좋게 정리 (구현 완료 직전).
+- `github-pr-workflow` — 로컬 커밋 후 push 흐름 이해 (커밋 단계).
 
 
 ## Dev-Booth 전용 스킬 (항상 사용)

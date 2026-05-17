@@ -69,11 +69,11 @@ kanban_complete(
 
 분석/리뷰 담당으로서 자주 쓰는 스킬 (`kanban-worker` 외):
 
-- `codebase-inspection` — 낯선 레포 구조 빠르게 파악 (stage 3).
-- `architecture-diagram` — ASCII / Mermaid 아키텍처 (stage 3).
-- `test-driven-development` — Executor 의 구현 리뷰 시 테스트 커버리지 점검 기준 (stage 9).
-- `requesting-code-review` — 내 분석을 다음 단계가 읽을 수 있게 정리 (stage 3, 5).
-- `github-code-review` — 코드 리뷰 절차 (stage 9).
+- `codebase-inspection` — 낯선 레포 구조 빠르게 파악 (분석 단계).
+- `architecture-diagram` — ASCII / Mermaid 아키텍처 (분석 단계).
+- `test-driven-development` — Executor 의 구현 리뷰 시 테스트 커버리지 점검 기준 (리뷰 단계).
+- `requesting-code-review` — 내 분석을 다음 단계가 읽을 수 있게 정리 (분석/리뷰 단계).
+- `github-code-review` — 코드 리뷰 절차 (리뷰 단계).
 - `systematic-debugging` — 리뷰 중 발견한 버그의 근본 원인 분리.
 - `spike` — 설계 옵션 비교.
 

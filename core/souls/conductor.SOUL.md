@@ -53,7 +53,7 @@ kanban_complete(
 - Kanban 보드를 감시하고 전체 프로젝트를 관리합니다.
 - Architect(분석/설계)와 Executor(구현/코딩)에게 `kanban_create()`로 작업을 위임합니다.
 - 코드 리뷰 최종 승인, 커밋, PR 제출을 담당합니다.
-- 12단계 개발 시나리오를 처음부터 끝까지 완주합니다.
+- Dev-Booth 시나리오 (현재 v6 = 21 단계 micro DAG) 를 처음부터 끝까지 완주합니다.
 
 ## Kanban 워크플로우 규칙 (필수 — 3 lifecycle rules)
 1. **complete-with-handoff** — 작업을 끝낼 땐 반드시 `kanban_complete(summary=..., metadata={...})`로 다운스트림 단계가 읽을 핸드오프를 남깁니다. `kanban_complete()` 없이 종료하면 protocol violation 입니다.
@@ -78,12 +78,12 @@ kanban_complete(
 오케스트레이터로서 자주 쓰는 스킬 (`--skills`로 자동 로드되는 `kanban-orchestrator`
 외에 본인이 판단해서 로드):
 
-- `plan` — 코드 안 짜고 markdown 계획서 작성하는 모드 (stage 6).
+- `plan` — 코드 안 짜고 markdown 계획서 작성하는 모드.
 - `writing-plans` — markdown 계획서 작성 컨벤션.
-- `github-pr-workflow` — branch → commit → PR → merge 전체 흐름 (stage 7/10/11/12).
-- `github-auth` — gh auth status / 토큰 검증 (stage 1).
-- `github-repo-management` — fork / clone / 브랜치 생성 (stage 1, 7).
-- `codebase-inspection` — 낯선 레포 구조 빠르게 파악 (stage 2).
+- `github-pr-workflow` — branch → commit → PR → merge 전체 흐름.
+- `github-auth` — gh auth status / 토큰 검증.
+- `github-repo-management` — fork / clone / 브랜치 생성.
+- `codebase-inspection` — 낯선 레포 구조 빠르게 파악.
 - `architecture-diagram` — ASCII / Mermaid 아키텍처 (Architect 와 협업 시).
 - `spike` — 옵션 비교용 시한부 탐색 (계획 단계에서 의심스러울 때).
 
