@@ -5,29 +5,26 @@ import { cn } from "@/lib/utils";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
-const STAR_OFFICE_LOCAL_PORT = 19000;
-const STAR_OFFICE_PUBLIC_ORIGIN = "https://village.excusa.uk";
+// Same-origin proxy path. The dashboard backend (village_proxy router)
+// forwards everything under this prefix to http://localhost:19000 and
+// rewrites Star-Office-UI's absolute paths so all assets/APIs route back
+// through the proxy. This works from LAN and Cloudflare alike without
+// needing port 19000 reachable from the browser.
+const STAR_OFFICE_PROXY_PATH = "/api/village-iframe/";
 
 function resolveStarOfficeOrigin(): string {
-  if (typeof window === "undefined") return STAR_OFFICE_PUBLIC_ORIGIN;
-  const { hostname, protocol } = window.location;
-  const isLocal =
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    /^192\.168\.\d+\.\d+$/.test(hostname) ||
-    /^10\.\d+\.\d+\.\d+$/.test(hostname) ||
-    /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(hostname);
-  if (isLocal) {
-    const scheme = protocol === "https:" ? "https:" : "http:";
-    return `${scheme}//${hostname}:${STAR_OFFICE_LOCAL_PORT}`;
-  }
-  return STAR_OFFICE_PUBLIC_ORIGIN;
+  if (typeof window === "undefined") return "";
+  return STAR_OFFICE_PROXY_PATH;
 }
 
 export default function VillagePage() {
   const [boards, setBoards] = useState<string[]>([]);
   const [selectedBoard, setSelectedBoard] = useState<string>("");
-  const [origin, setOrigin] = useState<string>(STAR_OFFICE_PUBLIC_ORIGIN);
+  // Initial origin is empty so SSR renders no iframe. Without this guard, the
+  // server-side iframe pointed at https://village.excusa.uk — which sits
+  // behind Cloudflare Access (X-Frame-Options: DENY) and showed a refused-to-
+  // load error before the client effect could swap to the LAN URL.
+  const [origin, setOrigin] = useState<string>("");
   const [iframeStatus, setIframeStatus] = useState<"loading" | "ok" | "error">("loading");
 
   useEffect(() => {
@@ -77,14 +74,16 @@ export default function VillagePage() {
               <option key={b} value={b}>{b}</option>
             ))}
           </select>
-          <a
-            href={origin}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-white/40 transition-colors hover:text-white/80"
-          >
-            ↗ open
-          </a>
+          {origin && (
+            <a
+              href={origin}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-white/40 transition-colors hover:text-white/80"
+            >
+              ↗ open
+            </a>
+          )}
           <span
             className={cn(
               "h-2 w-2 rounded-full",
@@ -100,17 +99,19 @@ export default function VillagePage() {
       </header>
 
       <div className="relative flex-1">
-        <iframe
-          key={origin}
-          src={origin}
-          title="Dev-Booth Village (Star-Office-UI)"
-          className="absolute inset-0 h-full w-full border-none"
-          onLoad={() => setIframeStatus("ok")}
-          onError={() => setIframeStatus("error")}
-        />
-        {iframeStatus === "loading" && (
+        {origin ? (
+          <iframe
+            key={origin}
+            src={origin}
+            title="Dev-Booth Village (Star-Office-UI)"
+            className="absolute inset-0 h-full w-full border-none"
+            onLoad={() => setIframeStatus("ok")}
+            onError={() => setIframeStatus("error")}
+          />
+        ) : null}
+        {(!origin || iframeStatus === "loading") && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-white/40">
-            loading {origin}…
+            {origin ? `loading ${origin}…` : "resolving Village host…"}
           </div>
         )}
       </div>
