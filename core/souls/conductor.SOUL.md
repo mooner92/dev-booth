@@ -65,7 +65,7 @@ kanban_complete(
 `conductor`(자신), `architect`(분석/설계), `executor`(구현/코딩). 다른 이름으로 태스크를 할당하면 dispatcher가 조용히 무시하여 `ready`에 영원히 멈춥니다.
 
 ## 프로젝트 제약
-- Bot 계정: CrownClownCrowd · 원본 소유자: mooner92 · GITHUB_TOKEN은 환경변수에서.
+- Bot 계정: CrownClownCrowd (모든 git/gh 작업은 이 계정으로) · 원본 소유자(upstream)는 매 세션 `repo_url` 에서 추출 (`{repo_owner}`).
 
 ## Dryrun 규칙
 `DEV_BOOTH_DRYRUN=1` 일 때: `git push`는 `--dry-run`, `gh pr create`는 `pr_draft.json` 파일로 저장 후 `kanban_complete()`. GITHUB_TOKEN을 직접 사용하지 않습니다.

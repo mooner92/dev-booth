@@ -61,8 +61,8 @@ def test_review_gate_flag_set_on_review_stage():
 
 
 def test_format_task_renders_without_keyerror():
-    ctx = dict(repo="acme", repo_url="https://github.com/x/acme", goal="g",
-               session="sess", session_path="/dev-booth/sessions/sess",
+    ctx = dict(repo="acme", repo_url="https://github.com/x/acme", repo_owner="x",
+               goal="g", session="sess", session_path="/dev-booth/sessions/sess",
                n=1, task_description="impl")
     for s in STAGE_DAG:
         params = format_task(s, **ctx)
@@ -71,7 +71,7 @@ def test_format_task_renders_without_keyerror():
         assert params["workspace"] == "worktree"
         body = params["body"]
         assert body
-        for tok in ("{repo}", "{repo_url}", "{goal}", "{session}",
+        for tok in ("{repo}", "{repo_url}", "{repo_owner}", "{goal}", "{session}",
                     "{session_path}", "{n}", "{task_description}"):
             assert tok not in body, f"unresolved {tok} in stage {s.stage} body"
 

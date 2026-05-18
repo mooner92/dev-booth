@@ -20,6 +20,7 @@ from core.scenario import STAGE_DAG, SKILL_USE_CASES, format_task, ALLOWED_ASSIG
 CTX = {
     "repo":             "firebase-chat-exp",
     "repo_url":         "https://github.com/mooner92/firebase-chat-exp",
+    "repo_owner":       "mooner92",
     "goal":             "코드 품질 개선 및 버그 수정",
     "session":          "demo",
     "session_path":     "/dev-booth/sessions/demo",

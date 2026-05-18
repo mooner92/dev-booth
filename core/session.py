@@ -1,9 +1,9 @@
 """Dev-Booth session manager — Hermes Kanban edition.
 
 Replaces the v1 stateless orchestrator. This module does NOT run agents. It
-creates a named Kanban board and seeds the 12-stage DAG (core/scenario.py) as
-tasks; the always-running `hermes gateway` dispatcher then claims the tasks and
-spawns the assigned profiles as workers.
+creates a named Kanban board and seeds the v6 micro-task DAG (core/scenario.py)
+as tasks; the always-running `hermes gateway` dispatcher then claims the tasks
+and spawns the assigned profiles as workers.
 
 CLI command form (verified in Phase 0): the ``--board <slug>`` flag is a
 ``hermes kanban``-LEVEL flag and must come BEFORE the subcommand:
@@ -27,7 +27,7 @@ SESSIONS_ROOT = Path(os.getenv("DEV_BOOTH_PATH", "/dev-booth/sessions"))
 
 
 class DevBoothSession:
-    """Hermes-Kanban-backed Dev-Booth session: board setup + 12-stage DAG seed.
+    """Hermes-Kanban-backed Dev-Booth session: board setup + DAG seed.
 
     Unlike the v1 orchestrator, this class never spawns or drives agents. It
     only seeds the board; the gateway dispatcher does the rest.
@@ -36,7 +36,11 @@ class DevBoothSession:
     def __init__(self, session_name: str, repo_url: str, goal: str):
         self.session_name = session_name
         self.repo_url = repo_url.rstrip("/")
-        self.repo_name = self.repo_url.split("/")[-1].removesuffix(".git")
+        url_parts = self.repo_url.split("/")
+        self.repo_name = url_parts[-1].removesuffix(".git")
+        # upstream owner is whoever owns the source repo; the bot account
+        # (CrownClownCrowd) forks into its own namespace.
+        self.repo_owner = url_parts[-2] if len(url_parts) >= 2 else ""
         self.goal = goal
         # named board (NOT the default board) — isolation of an autonomous
         # git-action system from the operator's shared ~/.hermes/kanban.db
@@ -66,7 +70,7 @@ class DevBoothSession:
 
     # --------------------------------------------------------------- seed
     def seed(self) -> dict[int, str]:
-        """Seed the 12-stage DAG as Kanban tasks with --parent dependency links.
+        """Seed the DAG as Kanban tasks with --parent dependency links.
 
         Returns the stage_no -> task_id map. The dispatcher promotes a child
         task to `ready` only when all its parents are `done`.
@@ -74,6 +78,7 @@ class DevBoothSession:
         ctx = {
             "repo": self.repo_name,
             "repo_url": self.repo_url,
+            "repo_owner": self.repo_owner,
             "goal": self.goal,
             "session": self.session_name,
             "session_path": str(self.session_path),  # v5: bodies hard-code absolute artifact paths
@@ -163,7 +168,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="core.session",
-        description="Seed a Dev-Booth 12-stage scenario onto a Hermes Kanban board.",
+        description="Seed the Dev-Booth scenario DAG onto a Hermes Kanban board.",
     )
     parser.add_argument("session", help="session name (also the board slug)")
     parser.add_argument("repo_url", help="GitHub repo URL to fork/clone/improve")

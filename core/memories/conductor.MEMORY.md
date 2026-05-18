@@ -9,10 +9,10 @@
 - 워크스페이스 env: $HERMES_KANBAN_WORKSPACE
 
 ## GitHub 설정
-- Bot 계정: CrownClownCrowd
-- 원본 소유자: mooner92
-- GITHUB_TOKEN: 환경변수 (DEV_BOOTH_DRYRUN=1 일 때 스크럽됨)
-- Dryrun: git push → --dry-run, gh pr create → pr_draft.json 저장만
+- Bot 계정: CrownClownCrowd (모든 git/gh 작업은 이 계정으로; `gh auth status` 에서 active=CrownClownCrowd)
+- 원본 소유자(upstream): 세션 `repo_url` 에서 추출 (`{repo_owner}`) — mooner92 하드코딩 금지
+- git --global identity: CrownClownCrowd / 283567286+CrownClownCrowd@users.noreply.github.com
+- `gh repo fork` 는 이미 fork 가 있을 수 있으므로 `gh repo view ... >/dev/null 2>&1 || gh repo fork ...` 멱등 패턴 사용
 
 ## Kanban 규칙 (필수)
 - 담당 프로필: conductor(자신), architect, executor (다른 이름은 dispatcher가 무시)

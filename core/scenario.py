@@ -113,10 +113,11 @@ STAGE_DAG: list[StageTask] = [
         parent_stages=[],
         skills=["github-auth", "github-repo-management"],
         body_template=_body("""## 작업
-{repo_url} 를 fork & clone 하세요.
+{repo_url} 를 fork & clone 하세요. 봇은 CrownClownCrowd 로 인증되어 있고,
+fork 가 이미 존재할 수 있으니 멱등하게 처리합니다.
 
 ## 단계
-1. `gh repo fork {repo_url} --org CrownClownCrowd --clone=false`
+1. `gh repo view CrownClownCrowd/{repo} >/dev/null 2>&1 || gh repo fork {repo_url} --clone=false`
 2. `gh repo clone CrownClownCrowd/{repo} {session_path}/project`
 3. `cd {session_path}/project && git checkout -b develop`
 4. `bash /dev-booth/core/dryrun/install_hooks.sh {session_path}/project`
@@ -669,7 +670,7 @@ PR 제출 (dryrun 이면 시뮬레이션만).
 2. pr_final.json 의 url 을 "DRYRUN://no-pr" 로 보장
 
 ## 단계 (live)
-1. `gh pr create --repo mooner92/{repo} --base main --head CrownClownCrowd:feature/devbooth-{session}-improvements -t "<title>" -b "<body>"`
+1. `gh pr create --repo {repo_owner}/{repo} --base main --head CrownClownCrowd:feature/devbooth-{session}-improvements -t "<title>" -b "<body>"`
 2. 반환 URL 을 `{session_path}/pr_final.json` 에 기록
 
 ## 완료
