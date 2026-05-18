@@ -106,7 +106,7 @@ def test_write_status_schema(sess):
     sess._write_status(step=3, agent="architect", status="active", board_slug="test-sess")
     status = json.loads((sess.session_path / "status.json").read_text(encoding="utf-8"))
     for key in ("session", "status", "current_step", "current_agent", "repo_url",
-                "repo_name", "board_slug", "dryrun", "started_at"):
+                "repo_name", "board_slug", "started_at"):
         assert key in status
     assert status["current_step"] == 3
     assert status["current_agent"] == "architect"

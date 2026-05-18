@@ -24,7 +24,6 @@ from core.scenario import ALLOWED_ASSIGNEES, STAGE_DAG, format_task
 
 HERMES_BIN = "/home/mooner92/.local/bin/hermes"
 SESSIONS_ROOT = Path(os.getenv("DEV_BOOTH_PATH", "/dev-booth/sessions"))
-DRYRUN = os.getenv("DEV_BOOTH_DRYRUN", "1") == "1"
 
 
 class DevBoothSession:
@@ -43,7 +42,6 @@ class DevBoothSession:
         # git-action system from the operator's shared ~/.hermes/kanban.db
         self.board_slug = session_name.lower().replace("_", "-").replace(" ", "-")
         self.session_path = SESSIONS_ROOT / session_name
-        self.dryrun = DRYRUN
 
     # -------------------------------------------------------------- setup
     def setup(self) -> None:
@@ -64,7 +62,7 @@ class DevBoothSession:
             )
 
         self._write_status(step=0, agent="system", status="initializing")
-        print(f"OK setup: session={self.session_name} board={self.board_slug} dryrun={self.dryrun}")
+        print(f"OK setup: session={self.session_name} board={self.board_slug}")
 
     # --------------------------------------------------------------- seed
     def seed(self) -> dict[int, str]:
@@ -152,7 +150,6 @@ class DevBoothSession:
             "repo_url": self.repo_url,
             "repo_name": self.repo_name,
             "board_slug": self.board_slug,
-            "dryrun": self.dryrun,
             "started_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             **extra,
         }

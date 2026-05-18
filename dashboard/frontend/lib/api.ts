@@ -65,7 +65,6 @@ export const api = {
     session_name: string;
     repo_url: string;
     goal: string;
-    mode: "dryrun" | "live";
   }) => apiPost<StartSessionResponse>(`/api/sessions/start`, body),
   unblockTask: (boardSlug: string, taskId: string) =>
     apiPost<{ success: boolean; task_id: string; board: string; message: string }>(

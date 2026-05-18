@@ -41,7 +41,6 @@ export function NewSessionModal({ open, onClose, onCreated }: NewSessionModalPro
   const [repoUrl, setRepoUrl] = useState("");
   const [sessionName, setSessionName] = useState("");
   const [goal, setGoal] = useState("");
-  const [mode, setMode] = useState<"dryrun" | "live">("dryrun");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nameManual, setNameManual] = useState(false);
@@ -75,7 +74,6 @@ export function NewSessionModal({ open, onClose, onCreated }: NewSessionModalPro
       setRepoUrl("");
       setSessionName("");
       setGoal("");
-      setMode("dryrun");
       setLoading(false);
       setError(null);
       setNameManual(false);
@@ -94,7 +92,7 @@ export function NewSessionModal({ open, onClose, onCreated }: NewSessionModalPro
     setLoading(true);
     setError(null);
     try {
-      await api.startSession({ session_name: sessionName, repo_url: repoUrl, goal, mode });
+      await api.startSession({ session_name: sessionName, repo_url: repoUrl, goal });
       onCreated(sessionName);
       onClose();
     } catch (err) {
@@ -206,28 +204,6 @@ export function NewSessionModal({ open, onClose, onCreated }: NewSessionModalPro
               rows={3}
               className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-brand"
             />
-          </div>
-
-          {/* Mode toggle */}
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-foreground">실행 모드</span>
-            <div className="flex gap-2">
-              {(["dryrun", "live"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMode(m)}
-                  className={cn(
-                    "flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
-                    mode === m
-                      ? "border-brand bg-brand/10 text-brand"
-                      : "border-border bg-background text-muted-foreground hover:border-muted-foreground",
-                  )}
-                >
-                  {m === "dryrun" ? "드라이런 (읽기 전용)" : "라이브 (실제 PR 생성)"}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Actions */}

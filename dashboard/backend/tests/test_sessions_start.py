@@ -34,7 +34,6 @@ def test_post_sessions_start_happy_path(tmp_path: Path, monkeypatch, client):
         "session_name": "my-test-session",
         "repo_url": "https://github.com/example/repo",
         "goal": "테스트 목표",
-        "mode": "dryrun",
     })
     assert resp.status_code == 200
     body = resp.json()

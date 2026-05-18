@@ -5,7 +5,7 @@ import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -33,17 +33,15 @@ class SessionStartRequest(BaseModel):
     session_name: str
     repo_url: str
     goal: str = "코드 품질 개선 및 버그 수정"
-    mode: Literal["dryrun", "live"] = "dryrun"
 
 
-def _run_session_seed(session_name: str, repo_url: str, goal: str, dryrun: bool) -> None:
-    env = os.environ.copy()
-    env["DEV_BOOTH_DRYRUN"] = "1" if dryrun else "0"
+def _run_session_seed(session_name: str, repo_url: str, goal: str) -> None:
     try:
         subprocess.run(
             ["/dev-booth/env/bin/python3", "-m", "core.session",
              session_name, repo_url, "--goal", goal],
-            cwd="/dev-booth", env=env, timeout=300, capture_output=True, check=False,
+            cwd="/dev-booth", env=os.environ.copy(), timeout=300,
+            capture_output=True, check=False,
         )
     except (subprocess.TimeoutExpired, OSError):
         pass  # best-effort; UI will see the session dir appear if seed succeeded
@@ -60,8 +58,7 @@ async def start_session(
     session_path = sessions_root / slug
     if session_path.exists():
         raise HTTPException(409, f"세션 '{slug}' 이미 존재합니다")
-    dryrun = body.mode != "live"
-    background_tasks.add_task(_run_session_seed, slug, body.repo_url, body.goal, dryrun)
+    background_tasks.add_task(_run_session_seed, slug, body.repo_url, body.goal)
     return {"session_name": slug, "status": "starting"}
 
 
