@@ -26,7 +26,7 @@
 - `core/scenario.py:119` stage 1 `gh repo view … || gh repo fork {repo_url}`
 - `core/scenario.py:120` stage 1 `gh repo clone CrownClownCrowd/{repo}`
 - `core/scenario.py:425` stage 12 `git push -u origin feature/…`
-- stage 19 `git push origin feature/…`
+- `core/scenario.py:613` stage 19 `git push origin feature/…`
 - `core/scenario.py:665` stage 21 `gh pr create --repo {repo_owner}/{repo} …`
 
 그러나 `run.sh`(커밋됨)는 여전히 dryrun을 기본값으로 두고 토큰을 제거한다:
