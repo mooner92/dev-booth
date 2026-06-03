@@ -1,19 +1,24 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Search } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { SessionSocket } from "@/lib/ws";
-import { AppHeader } from "@/components/AppHeader";
-import { FileTreePane } from "@/components/FileTreePane";
 import { ChatStream } from "@/components/ChatStream";
-import { MonitoringPane } from "@/components/MonitoringPane";
 import { MonacoModal } from "@/components/MonacoModal";
-import { StageBar } from "@/components/StageBar";
-import type { FileTree, LogEntry, SessionDetail, StatusSnapshot, WSMessage } from "@/types";
-import { SESSION_STATE_LABELS } from "@/lib/constants";
+import { KanbanBoard, trimTaskTitle } from "@/components/KanbanBoard";
+import { UnblockBanner } from "@/components/UnblockBanner";
+import { useKanban } from "@/hooks/useKanban";
+import type { LogEntry, SessionDetail, StatusSnapshot, WSMessage } from "@/types";
+import { STAGE_LABELS, STAGE_ORDER } from "@/lib/constants";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function toBoardSlug(name: string): string {
+  return name.toLowerCase().replace(/[_ ]+/g, "-");
+}
 
 function readSessionNameFromUrl(): string {
   if (typeof window === "undefined") return "";
@@ -23,6 +28,8 @@ function readSessionNameFromUrl(): string {
   return raw === "_" ? "" : raw;
 }
 
+// ── Shell (name resolution) ───────────────────────────────────────────────────
+
 export function SessionDetailClient({ name: propName }: { name?: string } = {}) {
   const [name, setName] = useState<string>(propName ?? "");
   useEffect(() => {
@@ -30,6 +37,7 @@ export function SessionDetailClient({ name: propName }: { name?: string } = {}) 
       setName(readSessionNameFromUrl());
     }
   }, [propName]);
+
   if (!name) {
     return (
       <main className="grid h-screen place-items-center">
@@ -40,30 +48,107 @@ export function SessionDetailClient({ name: propName }: { name?: string } = {}) 
   return <SessionDetailInner name={name} />;
 }
 
+// ── Inner ─────────────────────────────────────────────────────────────────────
+
 function SessionDetailInner({ name }: { name: string }) {
   const router = useRouter();
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [status, setStatus] = useState<StatusSnapshot | null>(null);
-  const [tree, setTree] = useState<FileTree | null>(null);
-  const [entries, setEntries] = useState<LogEntry[]>([]);
+  // JSONL-driven fallback entries (pre-kanban sessions)
+  const [jsonlEntries, setJsonlEntries] = useState<LogEntry[]>([]);
   const [viewPath, setViewPath] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [wsState, setWsState] = useState<"connecting" | "open" | "closed" | "reconnecting">("connecting");
+  const [wsState, setWsState] = useState<"connecting" | "open" | "closed" | "reconnecting">(
+    "connecting",
+  );
   const [searchOpen, setSearchOpen] = useState(false);
+  // Selected task for kanban chat feed (null = fall back to JSONL stream)
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const socketRef = useRef<SessionSocket | null>(null);
 
+  const boardSlug = toBoardSlug(name);
+  const { tasks, logsByTask, timeline } = useKanban(boardSlug, selectedTaskId ?? undefined);
+  const selectedTask = selectedTaskId
+    ? tasks.find((t) => t.id === selectedTaskId)
+    : undefined;
+  const selectedTaskTitle = selectedTask?.title;
+  const blockedTasks = useMemo(
+    () => tasks.filter((t) => t.status === "blocked"),
+    [tasks],
+  );
+  const [bulkUnblocking, setBulkUnblocking] = useState(false);
+
+  async function unblockAll() {
+    if (blockedTasks.length === 0 || bulkUnblocking) return;
+    setBulkUnblocking(true);
+    let failed = 0;
+    for (const task of blockedTasks) {
+      try {
+        await api.unblockTask(boardSlug, task.id);
+      } catch (e) {
+        failed += 1;
+        console.error("[unblockAll]", task.id, e);
+      }
+    }
+    setBulkUnblocking(false);
+    if (failed === 0) {
+      toast.success(`${blockedTasks.length}개 태스크 재시작 요청 완료`);
+    } else {
+      toast.error(`${failed}개 태스크 재시작 실패 (콘솔 확인)`);
+    }
+  }
+
+  // Auto-select the first running task when tasks load, if nothing selected yet
+  useEffect(() => {
+    if (selectedTaskId !== null) return;
+    const running = tasks.find((t) => t.status === "running");
+    if (running) setSelectedTaskId(running.id);
+  }, [tasks, selectedTaskId]);
+
+  // Resolve the entries to show in ChatStream:
+  // - If a task is selected AND that task has kanban logs → show kanban logs
+  // - Otherwise fall back to JSONL stream (pre-kanban sessions still work)
+  const activeTaskLogs = selectedTaskId ? (logsByTask[selectedTaskId] ?? null) : null;
+  const chatEntries: LogEntry[] =
+    activeTaskLogs && activeTaskLogs.length > 0 ? activeTaskLogs : jsonlEntries;
+
+  // ── Derived progress values ──────────────────────────────────────────────────
+  const { progressPercent, currentStageName } = useMemo(() => {
+    const total = tasks.length;
+    if (total === 0) {
+      // Fall back to status.current_stage if no kanban tasks yet
+      const stageIdx = status?.current_stage ?? 0;
+      const stageId = status?.current_stage_id ?? STAGE_ORDER[stageIdx] ?? "";
+      return {
+        progressPercent: total === 0 ? Math.round((stageIdx / STAGE_ORDER.length) * 100) : 0,
+        currentStageName: STAGE_LABELS[stageId] ?? stageId,
+      };
+    }
+    const done = tasks.filter((t) => t.status === "done").length;
+    const pct = Math.round((done / total) * 100);
+    // priority ladder per PRD: running > blocked > ready > (done==total ? 완료 : 대기 중)
+    const running = tasks.find((t) => t.status === "running");
+    const blocked = !running && tasks.find((t) => t.status === "blocked");
+    const ready = !running && !blocked && tasks.find((t) => t.status === "ready");
+    let stageName: string;
+    if (running) stageName = trimTaskTitle(running.title);
+    else if (blocked) stageName = `차단됨: ${trimTaskTitle(blocked.title)}`;
+    else if (ready) stageName = `준비: ${trimTaskTitle(ready.title)}`;
+    else stageName = done === total ? "완료" : "대기 중";
+    return { progressPercent: pct, currentStageName: stageName };
+  }, [tasks, status]);
+
+  // ── Data load ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
       try {
-        const [d, t, logs] = await Promise.all([
+        const [d, logs] = await Promise.all([
           api.getSession(name),
-          api.getFiles(name),
           api.getLogs(name, { limit: 200 }),
         ]);
         setDetail(d);
         setStatus(d.status);
-        setTree(t);
-        setEntries(logs.entries);
+        setJsonlEntries(logs.entries);
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
           toast.error("세션을 찾을 수 없습니다");
@@ -76,6 +161,7 @@ function SessionDetailInner({ name }: { name: string }) {
     load();
   }, [name, router]);
 
+  // ── WebSocket ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     const wsBase = process.env.NEXT_PUBLIC_WS_BASE ?? "";
     const sock = new SessionSocket(name, { baseUrl: wsBase });
@@ -83,12 +169,15 @@ function SessionDetailInner({ name }: { name: string }) {
     const offState = sock.onState((s) => setWsState(s));
     const off = sock.on((msg: WSMessage) => {
       if (msg.type === "log") {
-        setEntries((prev) => [...prev, msg.entry]);
+        setJsonlEntries((prev) => [...prev, msg.entry]);
       } else if (msg.type === "status") {
         setStatus(msg.status);
       } else if (msg.type === "reset") {
         toast.info(`로그 회전 감지 — 재로드 (${msg.reason})`);
-        api.getLogs(name, { limit: 200 }).then((p) => setEntries(p.entries)).catch(() => {});
+        api
+          .getLogs(name, { limit: 200 })
+          .then((p) => setJsonlEntries(p.entries))
+          .catch(() => {});
       }
     });
     sock.connect();
@@ -99,78 +188,153 @@ function SessionDetailInner({ name }: { name: string }) {
     };
   }, [name]);
 
-  // Cmd/Ctrl+F to toggle search
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
         e.preventDefault();
         setSearchOpen((v) => !v);
       } else if (e.key === "Escape") {
-        if (viewerOpen) {
-          setViewerOpen(false);
-        }
+        if (viewerOpen) setViewerOpen(false);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [viewerOpen]);
 
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <main className="flex h-screen flex-col">
-      <AppHeader />
-      <div className="flex items-center gap-3 border-b border-border bg-background px-4 py-3">
-        <button onClick={() => router.push("/")} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> 목록
-        </button>
-        <div className="ml-2">
-          <h1 className="text-base font-semibold">{name}</h1>
-          {detail && <p className="text-xs text-muted-foreground">{detail.root}</p>}
+    <div className="flex h-screen overflow-hidden bg-background">
+      {/* LEFT: kanban sidebar 240px */}
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-border lg:flex">
+        {/* Sidebar header: back nav + session name */}
+        <div className="shrink-0 border-b border-border px-3 py-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              aria-label="목록으로"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> 목록
+            </button>
+            <span className="ml-1 truncate text-sm font-semibold" title={name}>
+              {name}
+            </span>
+          </div>
+          {detail && (
+            <p
+              className="mt-0.5 truncate text-[10px] text-muted-foreground"
+              title={detail.root}
+            >
+              {detail.root}
+            </p>
+          )}
         </div>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">
-            WS: {wsState === "open" ? "연결됨" : wsState === "reconnecting" ? "재연결 중" : wsState === "closed" ? "끊김" : "연결 중"}
-          </span>
-          <button
-            onClick={() => setSearchOpen((v) => !v)}
-            className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
-          >
-            <Search className="h-3 w-3" /> 검색 (⌘F)
-          </button>
+
+        {/* Kanban task list + GPU footer */}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <KanbanBoard
+            boardSlug={boardSlug}
+            selectedTaskId={selectedTaskId ?? undefined}
+            onTaskSelect={setSelectedTaskId}
+          />
         </div>
-      </div>
-      {status && (
-        <div className="border-b border-border px-4 py-3">
-          <div className="mx-auto max-w-7xl">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 text-sm">
-                <span className="font-medium">상태:</span>
-                <span>{SESSION_STATE_LABELS[status.state] ?? status.state}</span>
-                {status.current_agent && <span className="text-muted-foreground">· {status.current_agent}</span>}
-              </div>
-              <div className="w-1/2">
-                <StageBar stage={status.current_stage} />
-              </div>
+      </aside>
+
+      {/* RIGHT: main content */}
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Top bar: progress + controls */}
+        <div className="shrink-0 border-b border-border bg-card px-4 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <span
+              className="truncate text-xs text-muted-foreground"
+              title={currentStageName}
+            >
+              {currentStageName}
+            </span>
+            <div className="flex shrink-0 items-center gap-3">
+              {blockedTasks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={unblockAll}
+                  disabled={bulkUnblocking}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-medium text-amber-400 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="차단된 모든 태스크 재시작"
+                >
+                  <span className="animate-pulse">⊘</span>
+                  {bulkUnblocking
+                    ? "재시작 중..."
+                    : `차단된 태스크 ${blockedTasks.length}개 모두 재시작`}
+                </button>
+              )}
+              <span className="text-[10px] text-muted-foreground">
+                WS:{" "}
+                {wsState === "open"
+                  ? "연결됨"
+                  : wsState === "reconnecting"
+                    ? "재연결 중"
+                    : wsState === "closed"
+                      ? "끊김"
+                      : "연결 중"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSearchOpen((v) => !v)}
+                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[10px] hover:bg-muted"
+                title="검색 (⌘F)"
+              >
+                <Search className="h-3 w-3" /> 검색
+              </button>
+            </div>
+          </div>
+          {/* Progress bar */}
+          <div className="mt-1.5 flex items-center gap-2">
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {progressPercent}%
+            </span>
+            <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full bg-brand transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
             </div>
           </div>
         </div>
-      )}
-      <div className="grid flex-1 overflow-hidden lg:grid-cols-[280px_1fr_320px]">
-        <aside className="hidden border-r border-border bg-card lg:block">
-          {tree && <FileTreePane root={tree.root} onPick={(p) => { setViewPath(p); setViewerOpen(true); }} />}
-        </aside>
-        <section className="overflow-hidden">
-          <ChatStream entries={entries} searchOpen={searchOpen} onCloseSearch={() => setSearchOpen(false)} />
-        </section>
-        <aside className="hidden border-l border-border bg-card lg:block">
-          <MonitoringPane session={name} queues={status?.queues ?? {}} />
-        </aside>
-      </div>
+
+        {/* Unblock banner — only when the selected task is blocked.
+            `key={selectedTaskId}` forces a fresh mount when the user
+            switches between blocked tasks so the previous "done" state
+            doesn't bleed into the new selection. */}
+        {selectedTask?.status === "blocked" && selectedTaskId && (
+          <UnblockBanner
+            key={selectedTaskId}
+            boardSlug={boardSlug}
+            taskId={selectedTaskId}
+            taskTitle={trimTaskTitle(selectedTask.title)}
+          />
+        )}
+
+        {/* Chat stream — full remaining height */}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ChatStream
+            entries={chatEntries}
+            timeline={timeline}
+            selectedTaskId={selectedTaskId ?? undefined}
+            selectedTaskTitle={selectedTaskTitle}
+            searchOpen={searchOpen}
+            onCloseSearch={() => setSearchOpen(false)}
+          />
+        </div>
+      </main>
+
+      {/* Monaco file viewer (still reachable programmatically) */}
       <MonacoModal
         open={viewerOpen}
         onClose={() => setViewerOpen(false)}
         session={name}
         path={viewPath}
       />
-    </main>
+    </div>
   );
 }

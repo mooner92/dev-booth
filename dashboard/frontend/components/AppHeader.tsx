@@ -20,6 +20,12 @@ export function AppHeader({ activeSessions, vllmOk }: { activeSessions?: number;
           )}
         </Link>
         <div className="flex items-center gap-3">
+          <Link
+            href="/village"
+            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            🏢 Village
+          </Link>
           <span className={`inline-flex items-center gap-2 text-xs ${vllmOk ? "text-seed-success" : "text-neutral-400"}`}>
             <span className={`inline-block h-2 w-2 rounded-full ${vllmOk ? "bg-seed-success" : "bg-neutral-400"}`} />
             vLLM

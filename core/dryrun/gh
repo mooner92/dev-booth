@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Dev-Booth dryrun gate — Layer 2 (defense-in-depth) for `gh`.
+#
+# Prepended to the gateway dispatcher's PATH at launch (run.sh). Under
+# DEV_BOOTH_DRYRUN=1 every mutating `gh pr` / `gh repo fork` / `gh release`
+# subcommand is BLOCKED (exit 0, logged) — `gh` talks to the GitHub API
+# directly, so a pre-push hook cannot catch it. The mechanically-enforced
+# backstop is Layer 3: run.sh does NOT export GITHUB_TOKEN/GH_TOKEN into the
+# gateway env under dryrun, so a worker has no credential to push or open a PR
+# by ANY path (gh, raw API, or otherwise). This wrapper is the visible,
+# fast-failing layer on top of that backstop.
+set -euo pipefail
+
+REAL_GH="/usr/bin/gh"
+for cand in $(type -ap gh 2>/dev/null); do
+  case "$cand" in
+    */core/dryrun/gh) continue ;;
+    *) REAL_GH="$cand"; break ;;
+  esac
+done
+
+if [[ "${DEV_BOOTH_DRYRUN:-1}" == "1" ]]; then
+  sub="${1:-}"; verb="${2:-}"
+  case "$sub $verb" in
+    "pr create"|"pr merge"|"pr close"|"pr ready"|"repo fork"|"release create")
+      echo "[dryrun-gate] BLOCKED: gh $sub $verb (DEV_BOOTH_DRYRUN=1) — no real GitHub mutation" >&2
+      echo '{"dryrun": true, "blocked": "gh '"$sub $verb"'", "url": "DRYRUN://no-pr"}'
+      exit 0
+      ;;
+  esac
+fi
+exec "$REAL_GH" "$@"

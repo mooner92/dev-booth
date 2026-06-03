@@ -2,10 +2,14 @@
 
 export interface LogEntry {
   id?: string | null;
-  kind?: string | null;
+  /** 'tool' | 'text' for kanban task logs; 'comment' for team timeline; legacy logs may carry other strings */
+  kind?: "tool" | "text" | "comment" | string | null;
   from?: string | null;
   to?: string | null;
   body?: string | null;
+  /** v6: comment → originating task identity for the tab label / badge */
+  task_id?: string | null;
+  task_title?: string | null;
   refs?: Record<string, unknown> | null;
   priority?: number | null;
   createdAt?: string | null;
@@ -103,3 +107,25 @@ export type WSMessage =
   | { type: "reset"; ts: string; reason: string; seq: string }
   | { type: "pong"; ts: string }
   | { type: "error"; ts: string; error: string };
+
+export interface GithubStatus {
+  logged_in: boolean;
+  account: string | null;
+  target: string;
+}
+
+export interface StartSessionResponse {
+  session_name: string;
+  status: string;
+}
+
+/** Shape of a kanban_update WebSocket push from /api/kanban/ws/kanban/:slug */
+export interface KanbanWSUpdate {
+  type: "kanban_update";
+  tasks?: import("@/hooks/useKanban").KanbanTask[];
+  comments?: import("@/hooks/useKanban").KanbanComment[];
+  /** per-task log entries; keys are task IDs; ≤5 active tasks × ≤50 entries */
+  logs?: Record<string, LogEntry[]>;
+  /** v6: board-wide team timeline, server-projected to LogEntry shape (≤100 entries) */
+  timeline?: LogEntry[];
+}

@@ -1,0 +1,23 @@
+# Dev-Booth Dashboard v10 UX — Ralph progress
+
+## Inheritance
+Builds on v9 agent enhancement (commits 9b869b2 → 10378ba, all local).
+
+## Phase 0 — probes (DONE)
+- ChatStream uses fixed-height virtualizer (80px); long messages overlap.
+- Backend has GET endpoints only — no POST for new sessions.
+- Main page page.tsx has stat cards + session list; no search/filter/new-session.
+- gh auth: CrownClownCrowd is logged in ✓ (Active account).
+- pytest baseline 153.
+
+## Workers
+- Worker A (backend) — DONE — 158 pytest (+5 new tests). Commit 7f46c3f→<next>.
+  - POST /api/sessions/start (slug validation, BackgroundTasks subprocess seed)
+  - GET /api/github/status (gh auth status → CrownClownCrowd check)
+  - 5 tests: happy / 409 / 400 / github logged-in / github failure
+- Worker B (designer, main page + modal) — in flight.
+- Lead (ChatStream) — DONE — virtualizer dropped, plain flex map. Commit 7f46c3f.
+
+## Commits so far
+- 7f46c3f phase1(ux10) ChatStream dynamic height
+- <next> phase2(ux10) backend POST /sessions/start + GET /github/status + tests

@@ -1,11 +1,13 @@
 import type {
   FileContent,
   FileTree,
+  GithubStatus,
   LogPage,
   MetricsSnapshot,
   QueueDepth,
   SessionDetail,
   SessionSummary,
+  StartSessionResponse,
   StatusSnapshot,
 } from "@/types";
 
@@ -28,6 +30,19 @@ async function apiGet<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, detail.detail ?? res.statusText);
+  }
+  return res.json() as Promise<T>;
+}
+
 export const api = {
   health: () => apiGet<{ ok: boolean; version: string; sessions_root: string }>("/api/health"),
   listSessions: () => apiGet<SessionSummary[]>("/api/sessions"),
@@ -45,4 +60,15 @@ export const api = {
   readFile: (name: string, path: string) =>
     apiGet<FileContent>(`/api/sessions/${encodeURIComponent(name)}/file?path=${encodeURIComponent(path)}`),
   getMetricsPreset: (preset: string) => apiGet<MetricsSnapshot>(`/api/metrics/preset/${encodeURIComponent(preset)}`),
+  getGithubStatus: () => apiGet<GithubStatus>(`/api/github/status`),
+  startSession: (body: {
+    session_name: string;
+    repo_url: string;
+    goal: string;
+  }) => apiPost<StartSessionResponse>(`/api/sessions/start`, body),
+  unblockTask: (boardSlug: string, taskId: string) =>
+    apiPost<{ success: boolean; task_id: string; board: string; message: string }>(
+      `/api/kanban/boards/${encodeURIComponent(boardSlug)}/tasks/${encodeURIComponent(taskId)}/unblock`,
+      {},
+    ),
 };

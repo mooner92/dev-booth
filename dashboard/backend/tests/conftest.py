@@ -48,7 +48,7 @@ def make_session(tmp_sessions_root: Path):
                 for i in range(count):
                     (qdir / f"msg_{i}.json").write_text(json.dumps({"i": i}))
         else:
-            for agent in ("openclaw", "hermes-a", "hermes-b"):
+            for agent in ("conductor", "architect", "executor"):
                 for state in ("inbox", "processing", "processed", "dead"):
                     (queues_root / agent / state).mkdir(parents=True, exist_ok=True)
         return session_root
@@ -61,8 +61,8 @@ def sample_awg_message():
     return {
         "id": "test-uuid-1",
         "kind": "instruction",
-        "from": "openclaw",
-        "to": "hermes-a",
+        "from": "conductor",
+        "to": "architect",
         "body": "프로젝트 분석을 시작해주세요.",
         "refs": {},
         "priority": 50,

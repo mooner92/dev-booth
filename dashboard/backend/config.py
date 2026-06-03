@@ -41,7 +41,7 @@ STAGE_CONFLICT_WINDOW_S: float = 60.0
 
 # AWG queue inspector
 AWG_POLL_INTERVAL_S: float = 2.0
-KNOWN_AGENTS: tuple[str, ...] = ("openclaw", "hermes-a", "hermes-b")
+KNOWN_AGENTS: tuple[str, ...] = ("conductor", "architect", "executor")
 QUEUE_STATES: tuple[str, ...] = ("inbox", "processing", "processed", "dead")
 
 # Prometheus proxy

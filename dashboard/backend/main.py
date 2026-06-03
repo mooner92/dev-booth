@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import config
-from .routers import health, metrics, sessions, ws
+from .routers import github, health, kanban, metrics, sessions, village, village_proxy, ws
 from .services.prometheus_proxy import PrometheusProxy
 from .services.session_hub import HubRegistry
 from .services.session_registry import SessionListCache
@@ -42,14 +42,18 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=list(config.CORS_ORIGINS),
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "X-Request-ID"],
 )
 
 app.include_router(health.router)
 app.include_router(sessions.router)
+app.include_router(github.router)
 app.include_router(metrics.router)
 app.include_router(ws.router)
+app.include_router(kanban.router)
+app.include_router(village.router)
+app.include_router(village_proxy.router)
 
 
 # Mount frontend export if available (production single-port mode)
