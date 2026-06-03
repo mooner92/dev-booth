@@ -67,6 +67,7 @@ class DevBoothSession:
 
         self._write_status(step=0, agent="system", status="initializing")
         print(f"OK setup: session={self.session_name} board={self.board_slug}")
+        self.seed()
 
     # --------------------------------------------------------------- seed
     def seed(self) -> dict[int, str]:
@@ -177,7 +178,6 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     session = DevBoothSession(args.session, args.repo_url, goal=args.goal)
     session.setup()
-    session.seed()
     return 0
 
 

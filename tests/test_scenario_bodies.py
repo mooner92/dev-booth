@@ -63,16 +63,30 @@ def test_body_template_size_budget(stage):
     )
 
 
+@pytest.mark.parametrize("stage", STAGE_DAG, ids=lambda s: f"stage-{s.stage}")
+def test_no_review_required_self_block(stage):
+    """v6.1 (full-automation): NO stage body may instruct the worker to
+    kanban_block with a 'review-required' reason. That self-block stalls the
+    autonomous pipeline because the gateway dispatcher only spawns `ready`
+    tasks and never touches `blocked` ones. Finding issues during analysis or
+    review is a normal output recorded in metadata, not a blocker."""
+    body = format_task(stage, **CTX)["body"]
+    assert "review-required" not in body, (
+        f"stage {stage.stage} still self-blocks with a 'review-required' reason"
+    )
+
+
 @pytest.mark.parametrize(
     "stage",
-    [s for s in STAGE_DAG if s.is_review_gate or s.tag == "implementation"],
+    [s for s in STAGE_DAG if "테스트" in s.title],
     ids=lambda s: f"stage-{s.stage}",
 )
-def test_review_and_implementation_have_block_pathway(stage):
-    """Review-gated stages and implementation stages MUST tell the worker how
-    to block, or they fall into protocol_violation when the work fails."""
+def test_test_stages_retain_failure_block_pathway(stage):
+    """The two test-execution stages (14, 17) MUST keep a kanban_block pathway
+    so a genuine test failure stops the lane instead of silently 'passing'.
+    This is the only legitimate block in the v6.1 always-complete flow."""
     body = format_task(stage, **CTX)["body"]
-    assert "kanban_block(" in body, f"stage {stage.stage} missing kanban_block( pathway"
+    assert "kanban_block(" in body, f"stage {stage.stage} missing kanban_block( failure pathway"
     assert "## 막힐 때" in body, f"stage {stage.stage} missing '## 막힐 때' header"
 
 

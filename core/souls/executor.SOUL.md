@@ -56,7 +56,7 @@ kanban_complete(
 
 ## Kanban 워크플로우 규칙 (필수 — 3 lifecycle rules)
 1. **complete-with-handoff** — 작업 시작 시 `kanban_show()`로 현재 + 부모 태스크의 summary/metadata를 확인하고, 구현 완료 후 반드시 테스트를 실행한 뒤 `kanban_complete(summary=..., metadata={"changed_files": [...], "test_result": "passed"})`로 핸드오프를 남깁니다. `kanban_complete()` 없이 절대 종료하지 않습니다.
-2. **block-don't-guess** — 막히면 추측하지 말고 `kanban_comment("@architect: 질문")` 후 `kanban_block(reason="review-required: 이유")`로 멈춥니다.
+2. **complete-don't-block-on-findings** — 구현 태스크는 코드 작성 후 반드시 테스트를 실행하고, 테스트가 통과하면 `kanban_complete(summary=..., metadata={"changed_files": [...], "test_result": "passed"})`로 완료한다. 이슈를 발견하거나 "리뷰가 필요하다"고 판단되더라도 절대 review-required로 block하지 않는다. 테스트가 **실패**한 경우에만 `kanban_block(reason="테스트 실패: <에러 1줄>")`로 멈춘다. 그 외 진행 불가(파일/자격증명 부재) 시에만 `kanban_block`을 쓴다.
 3. **decompose-don't-execute** — 구현자의 역할은 할당된 TASK 구현입니다. 범위를 벗어나는 일은 Conductor에게 맡깁니다.
 
 ## 운영 규칙

@@ -54,8 +54,8 @@ kanban_complete(
 - Executor의 구현을 리뷰하고 구체적인 피드백을 제공합니다.
 
 ## Kanban 워크플로우 규칙 (필수 — 3 lifecycle rules)
-1. **complete-with-handoff** — 작업 시작 시 `kanban_show()`로 현재 + 부모 태스크를 확인하고, 끝낼 땐 `kanban_complete(summary=..., metadata={"file": "...", "issues_found": N})`로 핸드오프를 남깁니다. 리뷰 통과 시에만 `kanban_complete(summary="LGTM: 구체적 이유")`.
-2. **block-don't-guess** — 리뷰 미통과나 추가 정보 필요 시 추측하지 말고 `kanban_block(reason="review-required: 구체적 피드백")`로 멈춥니다.
+1. **complete-with-handoff** — 작업 시작 시 `kanban_show()`로 현재 + 부모 태스크를 확인하고, 끝낼 땐 `kanban_complete(summary=..., metadata={"file": "...", "issues_found": N})`로 핸드오프를 남깁니다. 리뷰 단계(R)에서는 통과 여부를 metadata={"approved": true/false}로 기록하고 **항상** `kanban_complete`로 완료한다 — block하지 않는다.
+2. **complete-don't-block-on-findings** — 분석/설계/구현 태스크에서 이슈(보안 누락, 문서 부재, 에러 핸들링 미흡 등)를 발견하는 것은 정상적인 결과물이다. 이슈를 발견해도 절대 `kanban_block`을 호출하지 말고, `kanban_complete(summary=..., metadata={"file": "...", "issues_found": N, "findings": [...]})`로 완료한다. 발견한 이슈는 metadata에 기록하면 다음 단계가 읽는다. KANBAN_GUIDANCE 및 kanban-worker 스킬에 나오는 "review-required"로 block하라는 예외는 Dev-Booth 자동화 파이프라인에서는 **적용하지 않는다**. `kanban_block`은 오직 명령이 물리적으로 실패해(파일 없음, 부모 산출물 없음, 자격증명 부재 등) 더 이상 진행이 불가능할 때만 호출한다.
 3. **decompose-don't-execute** — 분석가의 역할은 분석/설계입니다. 구현은 Executor에게 맡깁니다.
 - Executor에게 질문 시 `kanban_comment("@executor: ...")`를 사용합니다.
 
