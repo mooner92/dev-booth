@@ -10,6 +10,7 @@ import { SessionCard } from "@/components/SessionCard";
 import { SessionCardSkeleton } from "@/components/SessionCardSkeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { NewSessionModal } from "@/components/NewSessionModal";
+import { SiteFooter } from "@/components/SiteFooter";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { GithubStatus, SessionSummary, StatusSnapshot } from "@/types";
@@ -224,6 +225,8 @@ export default function Page() {
           </div>
         </section>
       </div>
+
+      <SiteFooter />
 
       {/* New session modal */}
       <NewSessionModal
