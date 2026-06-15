@@ -112,12 +112,19 @@ def get_task_log(board_slug: str, task_id: str) -> dict:
             assignee = t.get("assignee") or "system"
             break
     raw = reader.get_task_log(task_id)
-    messages = [_to_log_entry(task_id, assignee, i, e) for i, e in enumerate(raw)]
+    ts_iso = _log_mtime_iso(reader, task_id)
+    messages = [_to_log_entry(task_id, assignee, i, e, ts_iso) for i, e in enumerate(raw)]
     return {"messages": messages, "runs": reader.get_runs(task_id)}
 
 
-def _to_log_entry(task_id: str, assignee: str, idx: int, raw: dict) -> dict:
-    """Project a worker-log line into the dashboard's LogEntry shape."""
+def _to_log_entry(task_id: str, assignee: str, idx: int, raw: dict,
+                  created_at: str | None = None) -> dict:
+    """Project a worker-log line into the dashboard's LogEntry shape.
+
+    The hermes worker log has no per-line timestamps, so ``created_at`` carries
+    the log file's mtime (best-effort last-write time) when the caller supplies
+    it — accurate enough for the live-tailing dashboard and far better than no
+    timestamp at all."""
     body = raw.get("line", "")
     return {
         "id":        f"log-{task_id}-{idx}",
@@ -125,7 +132,7 @@ def _to_log_entry(task_id: str, assignee: str, idx: int, raw: dict) -> dict:
         "to":        None,
         "kind":      "tool" if body.lstrip().startswith("kanban_") else "text",
         "body":      body,
-        "createdAt": None,    # hermes log has no per-line timestamps in v0.13.0
+        "createdAt": created_at,
     }
 
 
@@ -193,6 +200,15 @@ def _epoch_to_iso(ts) -> str | None:
     return datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
 
 
+def _log_mtime_iso(reader: "KanbanReader", task_id: str) -> str | None:
+    """Best-effort timestamp for raw worker-log lines: the log file's mtime."""
+    try:
+        p = reader.db_path.parent / "logs" / f"{task_id}.log"
+        return _epoch_to_iso(int(p.stat().st_mtime))
+    except Exception:
+        return None
+
+
 def _collect_timeline(reader: KanbanReader, limit: int = _WS_TIMELINE_LIMIT) -> list[dict]:
     """WS-bounded timeline projection — comments + done/blocked status events,
     merged in chronological order."""
@@ -225,7 +241,8 @@ def _collect_logs(reader: KanbanReader, tasks: list[dict]) -> dict[str, list[dic
         assignee = t.get("assignee") or "system"
         raw = reader.get_task_log(tid, limit=_WS_LOG_LINE_LIMIT)
         if raw:
-            logs[tid] = [_to_log_entry(tid, assignee, i, e) for i, e in enumerate(raw)]
+            _ts = _log_mtime_iso(reader, tid)
+            logs[tid] = [_to_log_entry(tid, assignee, i, e, _ts) for i, e in enumerate(raw)]
     return logs
 
 
