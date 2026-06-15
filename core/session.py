@@ -52,6 +52,7 @@ class DevBoothSession:
         """Create the session dir + the named Kanban board; write status.json."""
         self.session_path.mkdir(parents=True, exist_ok=True)
         (self.session_path / "log").mkdir(exist_ok=True)
+        self._ensure_clone()  # deterministic: project/ exists before any stage runs
 
         existing = self._kanban_json("boards", "list")
         existing_slugs = {
@@ -68,6 +69,49 @@ class DevBoothSession:
         self._write_status(step=0, agent="system", status="initializing")
         print(f"OK setup: session={self.session_name} board={self.board_slug}")
         self.seed()
+
+    # -------------------------------------------------------- ensure clone
+    def _ensure_clone(self) -> None:
+        """Guarantee ``{session_path}/project`` exists BEFORE any agent runs.
+
+        The fork+clone is a purely mechanical step; delegating it to the stage-1
+        conductor LLM means a weak model can call ``kanban_complete`` without
+        actually cloning, leaving every downstream stage to block on a missing
+        ``project/`` (the gtp-gemma-0614 failure). Doing it deterministically
+        here makes the clone model-independent.
+
+        Idempotent (no-op when ``.git`` already exists) and NON-fatal: a failure
+        here just falls back to the hardened stage-1 agent path, so seeding still
+        proceeds. Dryrun-safe — ``gh repo clone`` is read-only (the dryrun gate
+        only blocks mutating fork/pr/release), and gh authenticates from its
+        config file even when GH_TOKEN is scrubbed from the env.
+        """
+        project = self.session_path / "project"
+        if (project / ".git").is_dir():
+            print(f"  clone: already present at {project} (skip)")
+            return
+        bot_repo = f"CrownClownCrowd/{self.repo_name}"
+        # Prefer the bot fork (it is the push target); fall back to the upstream
+        # repo read-only when the fork does not exist yet (e.g. dryrun blocked it).
+        src = bot_repo
+        view = subprocess.run(
+            ["gh", "repo", "view", bot_repo],
+            capture_output=True, text=True,
+        )
+        if view.returncode != 0 and self.repo_owner:
+            src = f"{self.repo_owner}/{self.repo_name}"
+        clone = subprocess.run(
+            ["gh", "repo", "clone", src, str(project)],
+            capture_output=True, text=True,
+        )
+        if clone.returncode != 0 or not (project / ".git").is_dir():
+            print(f"  clone WARN: {src} -> {project} failed "
+                  f"({clone.stderr.strip()[:160]}) — stage-1 agent will retry")
+            return
+        # -B: create-or-reset develop so a re-seed is idempotent.
+        subprocess.run(["git", "-C", str(project), "checkout", "-B", "develop"],
+                       capture_output=True, text=True)
+        print(f"  clone OK: {src} -> {project} (branch=develop)")
 
     # --------------------------------------------------------------- seed
     def seed(self) -> dict[int, str]:

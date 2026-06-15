@@ -129,3 +129,27 @@ def test_body_omits_skills_section_when_empty():
     )
     body = format_task(synthetic, **CTX)["body"]
     assert "## 활용 가능한 스킬" not in body
+
+
+# --- clone robustness gate (gtp-gemma-0614 regression) -----------------------
+def _stage(n):
+    from core.scenario import STAGE_DAG
+    return next(s for s in STAGE_DAG if s.stage == n)
+
+
+def test_stage1_clone_is_idempotent_and_verified():
+    """Stage 1 must not false-complete: idempotent clone + post-condition verify
+    that blocks honestly when the clone is missing (the gtp-gemma-0614 failure)."""
+    body = format_task(_stage(1), **CTX)["body"]
+    sp = CTX["session_path"]
+    assert f"test -d {sp}/project/.git ||" in body, "stage-1 clone is not idempotent"
+    assert "CLONE_MISSING" in body and "kanban_block" in body, "stage-1 lacks a verify gate"
+
+
+def test_repo_cwd_stages_self_heal_missing_clone():
+    """repo_cwd preamble must tell workers to RECOVER a missing clone, not block."""
+    body = format_task(_stage(2), **CTX)["body"]
+    assert "없으면" in body and "gh repo clone CrownClownCrowd/" in body, \
+        "stage-2 preamble does not self-heal a missing clone"
+    # and must NOT carry the old counterproductive 'never re-clone' blanket rule
+    assert "파일이 없다고 다시 clone 하지 마세요" not in body

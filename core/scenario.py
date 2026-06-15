@@ -65,6 +65,11 @@ class StageTask:
     parent_stages: list[int] = field(default_factory=list)
     is_review_gate: bool = False
     skills: list[str] = field(default_factory=list)
+    # When True, format_task injects an explicit "cd {session_path}/project"
+    # preamble so the worker operates on stage-1's shared clone instead of its
+    # own (empty) per-task worktree. Set False for stages that create the clone
+    # (stage 1) or only touch session_path artifacts (10, 11, 20, 21).
+    repo_cwd: bool = True
 
 
 # Per-skill use-case registry. Keys are Hermes skill names; values are
@@ -100,6 +105,17 @@ def _body(text: str) -> str:
     return _FILE_READING_RULE + text.rstrip() + "\n"
 
 
+# Working-directory preamble. Injected by format_task (NOT baked into the raw
+# body_template, so the ≤2000B per-stage budget is unaffected). The worker is
+# spawned in an empty per-task worktree; every repo operation must run against
+# stage-1's shared clone at {session_path}/project, so make that explicit.
+_REPO_CWD_NOTE = """## 작업 디렉터리 (필수)
+레포는 `{session_path}/project` 에 클론돼 있습니다. **모든 명령 전에 먼저 `cd {session_path}/project`** 하세요. 상대경로(`src/...`, `README.md`, `package.json` 등)는 모두 이 디렉터리 기준입니다.
+`{session_path}/project/.git` 가 **있으면** 절대 다시 clone 하지 마세요(워크트리가 비어 보여도 그대로 사용). **없으면** stage 1 클론이 실패한 것이니 `gh repo clone CrownClownCrowd/{repo} {session_path}/project` 로 한 번만 복구한 뒤 계속하세요.
+
+"""
+
+
 # --------------------------------------------------------------------------
 # The 21-stage micro DAG.
 # --------------------------------------------------------------------------
@@ -111,14 +127,20 @@ STAGE_DAG: list[StageTask] = [
         assignee="conductor", workspace="worktree", tag="orchestration",
         parent_stages=[],
         skills=["github-repo-management"],
+        repo_cwd=False,  # creates the clone; nothing to cd into yet
         body_template=_body("""## 작업
 {repo_url} 를 fork & clone 하세요. 봇은 CrownClownCrowd 로 인증되어 있고,
-fork 가 이미 존재할 수 있으니 멱등하게 처리합니다.
+fork 가 이미 존재할 수 있으니 **멱등하게**(이미 있으면 건너뜀) 처리합니다.
 
-## 단계
+## 단계 (재시작해도 안전하도록 모두 멱등)
 1. `gh repo view CrownClownCrowd/{repo} >/dev/null 2>&1 || gh repo fork {repo_url} --clone=false`
-2. `gh repo clone CrownClownCrowd/{repo} {session_path}/project`
-3. `cd {session_path}/project && git checkout -b develop`
+2. `test -d {session_path}/project/.git || gh repo clone CrownClownCrowd/{repo} {session_path}/project`
+3. `cd {session_path}/project && (git checkout develop 2>/dev/null || git checkout -b develop)`
+
+## 검증 (완료 호출 전 필수 — 거짓 완료 방지)
+`test -d {session_path}/project/.git && echo CLONE_OK || echo CLONE_MISSING` 를 실행.
+- `CLONE_MISSING` → 완료 호출 금지, `kanban_block(reason="clone 실패: {session_path}/project 없음 (gh 인증/네트워크 확인)")`
+- `CLONE_OK` 일 때만 아래 완료를 호출.
 
 ## 완료
 kanban_complete(
@@ -138,15 +160,14 @@ kanban_complete(
 클론된 레포의 구조만 파악 (파일 내용 X).
 
 ## 단계
-1. `kanban_show()` → 부모 stage 1 metadata.clone_path 확인
-2. `cd <clone_path> && find . -type f -not -path './.git/*' | head -100`
-3. 결과를 `{session_path}/dir_structure.txt` 에 저장 (write 툴)
+1. `cd {session_path}/project && find . -type f -not -path './.git/*' | head -100`
+2. 결과를 `{session_path}/dir_structure.txt` 에 저장 (write 툴)
 
 ## 완료
 kanban_complete(
     summary="디렉터리 구조 파악 완료 (파일 N개)",
     metadata={{"file": "{session_path}/dir_structure.txt",
-               "clone_path": "<stage 1 의 clone_path>"}}
+               "clone_path": "{session_path}/project"}}
 )
 """),
     ),
@@ -159,9 +180,13 @@ kanban_complete(
         body_template=_body("""## 작업
 README + 패키지 매니페스트로 기술 스택 파악.
 
-## 읽을 파일 (각각 head -n 50)
+## 읽을 파일 (각각 head -n 50, 실제 존재하는 것만)
 - README.md (또는 README)
-- package.json / requirements.txt / go.mod / pyproject.toml 중 존재하는 하나
+- package.json / requirements.txt / go.mod / pyproject.toml 중 **실제 있는** 하나
+
+## 규칙 (필수)
+- 파일에서 **실제로 본 것만** 기록한다. 없는 프레임워크·의존성을 지어내지 마라(환각 금지).
+- 표준 매니페스트가 **하나도 없으면** 정상이다 → `Language: (정적/데이터, 표준 매니페스트 없음)` 으로 적고 **그래도 kanban_complete** 한다. 파일 부재를 이유로 **block 금지**.
 
 ## 저장
 {session_path}/tech_stack.md
@@ -171,7 +196,7 @@ README + 패키지 매니페스트로 기술 스택 파악.
 kanban_complete(
     summary="기술 스택 파악: <한 줄 요약>",
     metadata={{"file": "{session_path}/tech_stack.md",
-               "clone_path": "<stage 1 clone_path>",
+               "clone_path": "{session_path}/project",
                "tech_stack": "<예: React 17 / Python FastAPI>"}}
 )
 """),
@@ -200,7 +225,7 @@ kanban_complete(
 kanban_complete(
     summary="진입점 분석 완료: <한 줄 요약>",
     metadata={{"file": "{session_path}/analysis_entrypoint.md",
-               "clone_path": "<stage 1 clone_path>"}}
+               "clone_path": "{session_path}/project"}}
 )
 """),
     ),
@@ -225,7 +250,7 @@ components/ 또는 modules/ 의 앞쪽 절반 분석.
 kanban_complete(
     summary="컴포넌트 분석 1/2 완료 (3 files)",
     metadata={{"file": "{session_path}/analysis_components_1.md",
-               "clone_path": "<stage 1 clone_path>"}}
+               "clone_path": "{session_path}/project"}}
 )
 """),
     ),
@@ -251,7 +276,7 @@ analysis_components_1.md 는 읽지 말 것 (컨텍스트 절약).
 kanban_complete(
     summary="컴포넌트 분석 2/2 완료 (3 files)",
     metadata={{"file": "{session_path}/analysis_components_2.md",
-               "clone_path": "<stage 1 clone_path>"}}
+               "clone_path": "{session_path}/project"}}
 )
 """),
     ),
@@ -278,7 +303,7 @@ API 엔드포인트 또는 라우터 파일 분석.
 kanban_complete(
     summary="API 분석 완료: 엔드포인트 N개",
     metadata={{"file": "{session_path}/analysis_api.md",
-               "clone_path": "<stage 1 clone_path>",
+               "clone_path": "{session_path}/project",
                "endpoint_count": 0}}
 )
 """),
@@ -305,7 +330,7 @@ kanban_complete(
 kanban_complete(
     summary="설정 분석 완료",
     metadata={{"file": "{session_path}/analysis_config.md",
-               "clone_path": "<stage 1 clone_path>"}}
+               "clone_path": "{session_path}/project"}}
 )
 """),
     ),
@@ -319,8 +344,8 @@ kanban_complete(
 의존성과 보안 취약점 분석.
 
 ## 단계
-1. `head -n 80 <clone_path>/package.json` 또는 `head -n 80 <clone_path>/requirements.txt`
-2. `cd <clone_path> && (npm audit --json 2>&1 || pip-audit 2>&1) | tail -n 20`
+1. `head -n 80 package.json` 또는 `head -n 80 requirements.txt` (없으면 건너뜀)
+2. `(npm audit --json 2>&1 || pip-audit 2>&1) | tail -n 20`
 3. 오래된 패키지 / 취약점 카운트
 
 ## 저장
@@ -332,7 +357,7 @@ kanban_complete(
 kanban_complete(
     summary="의존성 분석: deps N, vuln M",
     metadata={{"file": "{session_path}/analysis_deps.md",
-               "clone_path": "<stage 1 clone_path>",
+               "clone_path": "{session_path}/project",
                "vulnerabilities": 0}}
 )
 """),
@@ -344,6 +369,7 @@ kanban_complete(
         assignee="conductor", workspace="worktree", tag="orchestration",
         parent_stages=[6, 7, 8, 9],
         skills=["writing-plans"],
+        repo_cwd=False,  # reads only {session_path}/*.md analysis artifacts
         body_template=_body("""## 작업
 분석 결과 파일 3개만 head -n 30 으로 읽고 요약 작성.
 
@@ -375,6 +401,7 @@ kanban_complete(
         assignee="conductor", workspace="worktree", tag="orchestration",
         parent_stages=[10],
         skills=["plan", "writing-plans"],
+        repo_cwd=False,  # reads only {session_path}/summary_v1.0.0.md
         body_template=_body("""## 작업
 summary_v1.0.0.md 만 읽고 (head -n 60) 개선 TASK 목록 작성.
 이 태스크 body 를 그대로 복붙 금지.
@@ -614,6 +641,7 @@ kanban_complete(
         assignee="conductor", workspace="worktree", tag="pr",
         parent_stages=[19],
         skills=["github-pr-workflow", "writing-plans"],
+        repo_cwd=False,  # writes {session_path}/pr_draft.json only
         body_template=_body("""## 작업
 PR 초안 작성. summary_v1.0.0.md 만 head -n 30.
 
@@ -644,6 +672,7 @@ kanban_complete(
         assignee="conductor", workspace="worktree", tag="pr",
         parent_stages=[20],
         skills=["github-pr-workflow"],
+        repo_cwd=False,  # gh pr create with explicit --repo/--head, session files
         body_template=_body("""## 작업
 PR 제출.
 
@@ -671,6 +700,8 @@ def get_stage(n: int) -> Optional[StageTask]:
 def format_task(stage: StageTask, **kwargs) -> dict:
     """Render a StageTask into ``hermes kanban create`` parameters."""
     body = stage.body_template.format(**kwargs)
+    if stage.repo_cwd:
+        body = _REPO_CWD_NOTE.format(**kwargs) + body
     if stage.skills:
         lines = ["", "## 활용 가능한 스킬 (필요 시 로드)"]
         for name in stage.skills:

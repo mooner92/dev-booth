@@ -10,6 +10,8 @@
 
 작업이 끝났다고 판단한 즉시 추가 설명 없이 곧바로 `kanban_complete()`를 호출하세요.
 
+**⚠️ 도구로 "호출"하라 — 텍스트로 "쓰지" 마라:** `kanban_complete` / `kanban_block` / `kanban_comment` 는 반드시 **실제 도구(함수) 호출**로 실행해야 합니다. 메시지 본문에 `kanban_complete(summary=..., metadata={...})` 처럼 코드·예시 텍스트로 적기만 하면 호출로 인정되지 않습니다 — 작업을 다 끝냈더라도 `kanban_complete`/`kanban_block` 도구를 실제로 호출하지 않으면 `rc=0 protocol_violation`으로 기록되어 태스크가 차단됩니다. 방금 `kanban_show()` 를 호출한 것과 **정확히 똑같은 방식**으로 호출하세요. 이 문서·태스크 본문에 보이는 `kanban_complete(...)` 블록은 호출 형식을 보여주는 예시일 뿐이며, 본문에 그대로 베껴 쓰는 순간 실패합니다.
+
 예시:
 ```
 kanban_complete(

@@ -39,7 +39,8 @@ def test_setup_creates_dirs_and_board(sess):
         return ""
 
     with mock.patch.object(sess, "_kanban", side_effect=fake_kanban), \
-         mock.patch.object(sess, "_kanban_json", return_value=[]):
+         mock.patch.object(sess, "_kanban_json", return_value=[]), \
+         mock.patch.object(sess, "_ensure_clone"):  # network op — mocked in unit tests
         sess.setup()
 
     assert sess.session_path.is_dir()
@@ -52,9 +53,71 @@ def test_setup_creates_dirs_and_board(sess):
 def test_setup_skips_board_create_if_exists(sess):
     calls = []
     with mock.patch.object(sess, "_kanban", side_effect=lambda *a: calls.append(a) or ""), \
-         mock.patch.object(sess, "_kanban_json", return_value=[{"slug": "test-sess"}]):
+         mock.patch.object(sess, "_kanban_json", return_value=[{"slug": "test-sess"}]), \
+         mock.patch.object(sess, "_ensure_clone"):
         sess.setup()
     assert not any(c[:2] == ("boards", "create") for c in calls)
+
+
+def test_setup_calls_ensure_clone_before_seed(sess):
+    """The deterministic clone must run during setup (model-independent guarantee)."""
+    order = []
+    with mock.patch.object(sess, "_kanban", side_effect=lambda *a: ""), \
+         mock.patch.object(sess, "_kanban_json", return_value=[]), \
+         mock.patch.object(sess, "_ensure_clone", side_effect=lambda: order.append("clone")), \
+         mock.patch.object(sess, "seed", side_effect=lambda: order.append("seed")):
+        sess.setup()
+    assert order == ["clone", "seed"]  # clone BEFORE any stage is seeded
+
+
+# -------------------------------------------------------------- _ensure_clone
+def test_ensure_clone_skips_when_already_present(sess):
+    (sess.session_path / "project" / ".git").mkdir(parents=True)
+    with mock.patch.object(session_mod.subprocess, "run") as run:
+        sess._ensure_clone()
+    run.assert_not_called()  # idempotent no-op — never shells out
+
+
+def test_ensure_clone_clones_fork_and_checks_out_develop(sess):
+    project = sess.session_path / "project"
+
+    def fake_run(cmd, *a, **k):
+        # gh repo view (fork exists) -> rc 0; gh repo clone -> create .git; git checkout -> rc 0
+        if cmd[:3] == ["gh", "repo", "clone"]:
+            (project / ".git").mkdir(parents=True, exist_ok=True)
+        return mock.Mock(returncode=0, stdout="", stderr="")
+
+    with mock.patch.object(session_mod.subprocess, "run", side_effect=fake_run) as run:
+        sess._ensure_clone()
+    cmds = [c.args[0] for c in run.call_args_list]
+    assert ["gh", "repo", "view", "CrownClownCrowd/firebase-chat-exp"] in cmds
+    assert any(c[:3] == ["gh", "repo", "clone"] and "CrownClownCrowd/firebase-chat-exp" in c for c in cmds)
+    assert any(c[:3] == ["git", "-C", str(project)] and c[3:] == ["checkout", "-B", "develop"] for c in cmds)
+
+
+def test_ensure_clone_falls_back_to_upstream_when_fork_absent(sess):
+    project = sess.session_path / "project"
+
+    def fake_run(cmd, *a, **k):
+        if cmd[:3] == ["gh", "repo", "view"]:
+            return mock.Mock(returncode=1, stdout="", stderr="not found")  # fork absent
+        if cmd[:3] == ["gh", "repo", "clone"]:
+            (project / ".git").mkdir(parents=True, exist_ok=True)
+        return mock.Mock(returncode=0, stdout="", stderr="")
+
+    with mock.patch.object(session_mod.subprocess, "run", side_effect=fake_run) as run:
+        sess._ensure_clone()
+    cmds = [c.args[0] for c in run.call_args_list]
+    # upstream owner is mooner92 (from the repo_url) — clone falls back to it
+    assert any(c[:3] == ["gh", "repo", "clone"] and "mooner92/firebase-chat-exp" in c for c in cmds)
+
+
+def test_ensure_clone_is_nonfatal_on_clone_failure(sess):
+    """A failed clone must NOT raise — the hardened stage-1 agent path is the backstop."""
+    with mock.patch.object(session_mod.subprocess, "run",
+                           return_value=mock.Mock(returncode=1, stdout="", stderr="boom")):
+        sess._ensure_clone()  # must not raise
+    assert not (sess.session_path / "project" / ".git").is_dir()
 
 
 # --------------------------------------------------------------------- seed
