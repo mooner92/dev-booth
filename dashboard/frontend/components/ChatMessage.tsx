@@ -26,7 +26,11 @@ function processBody(raw: string | null | undefined): string {
   return s.replace(/^\s+|\s+$/g, "");
 }
 
-export function ChatMessage({ entry }: { entry: LogEntry }) {
+export function ChatMessage({
+  entry,
+}: {
+  entry: LogEntry & { repeat?: number; lastAt?: string };
+}) {
   const agent = entry.from ?? "system";
   const color = AGENT_COLORS[agent] ?? AGENT_COLORS.system;
   const label = AGENT_LABELS[agent] ?? agent;
@@ -46,6 +50,16 @@ export function ChatMessage({ entry }: { entry: LogEntry }) {
     try { return formatDistanceToNowStrict(date, { addSuffix: true, locale: ko }); } catch { return ""; }
   }, [date]);
   const fullTitle = date ? `${date.toLocaleString("ko-KR")}${relative ? ` · ${relative}` : ""}` : ts;
+
+  // Collapsed duplicate runs carry a repeat count + the latest timestamp.
+  const repeat = entry.repeat ?? 1;
+  const lastDate = useMemo(() => {
+    if (!entry.lastAt) return null;
+    try { return parseISO(entry.lastAt); } catch { return null; }
+  }, [entry.lastAt]);
+  const lastClock = lastDate
+    ? lastDate.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+    : "";
 
   const isComment = entry.kind === "comment";
   const isStatusChange = entry.kind === "status_change";
@@ -85,11 +99,20 @@ export function ChatMessage({ entry }: { entry: LogEntry }) {
               {entry.kind}
             </span>
           )}
+          {repeat > 1 && (
+            <span
+              title={lastClock ? `${repeat}회 반복 · 마지막 ${lastClock}` : `${repeat}회 반복`}
+              className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400"
+            >
+              ×{repeat}
+            </span>
+          )}
           <time
             title={fullTitle}
             className="ml-auto shrink-0 font-mono text-xs tabular-nums text-muted-foreground/90"
           >
             {clock || "—"}
+            {repeat > 1 && lastClock ? ` ~ ${lastClock}` : ""}
           </time>
         </div>
 

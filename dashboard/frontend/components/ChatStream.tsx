@@ -26,6 +26,34 @@ function isNoise(body: string): boolean {
   return NOISE_BODY_PATTERNS.some((p) => p.test(body.trim()));
 }
 
+export type DisplayEntry = LogEntry & { repeat?: number; lastAt?: string };
+
+/** Collapse consecutive identical messages (same from + kind + body) into a
+ * single row carrying a repeat count + the latest timestamp. A stuck worker
+ * re-emits the exact same kanban_comment dozens of times (non-termination
+ * loop); collapsing keeps the timeline readable without losing the signal
+ * that it repeated. */
+function collapseDuplicates(entries: LogEntry[]): DisplayEntry[] {
+  const out: DisplayEntry[] = [];
+  for (const e of entries) {
+    const body = (e.body ?? "").trim();
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      body &&
+      (prev.body ?? "").trim() === body &&
+      prev.from === e.from &&
+      prev.kind === e.kind
+    ) {
+      prev.repeat = (prev.repeat ?? 1) + 1;
+      prev.lastAt = e.createdAt ?? prev.lastAt;
+      continue;
+    }
+    out.push({ ...e });
+  }
+  return out;
+}
+
 /** Merge consecutive same-agent text entries within GROUP_WINDOW_MS into a
  * single entry with their bodies joined by a single space. tool/comment/
  * status_change entries are never merged — only kind in {undefined, null,
@@ -95,7 +123,10 @@ export function ChatStream({
   // narration); only the log tab gets grouping + noise filtering.
   const rawEntries = activeTab === "timeline" ? timeline : entries;
   const activeEntries = useMemo(
-    () => (activeTab === "log" ? groupAndFilterEntries(rawEntries) : rawEntries),
+    () =>
+      collapseDuplicates(
+        activeTab === "log" ? groupAndFilterEntries(rawEntries) : rawEntries,
+      ),
     [activeTab, rawEntries],
   );
   const q = query.toLowerCase();
