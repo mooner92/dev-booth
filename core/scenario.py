@@ -111,7 +111,7 @@ def _body(text: str) -> str:
 # stage-1's shared clone at {session_path}/project, so make that explicit.
 _REPO_CWD_NOTE = """## 작업 디렉터리 (필수)
 레포는 `{session_path}/project` 에 클론돼 있습니다. **모든 명령 전에 먼저 `cd {session_path}/project`** 하세요. 상대경로(`src/...`, `README.md`, `package.json` 등)는 모두 이 디렉터리 기준입니다.
-`{session_path}/project/.git` 가 **있으면** 절대 다시 clone 하지 마세요(워크트리가 비어 보여도 그대로 사용). **없으면** stage 1 클론이 실패한 것이니 `gh repo clone CrownClownCrowd/{repo} {session_path}/project` 로 한 번만 복구한 뒤 계속하세요.
+클론은 세션 시작 시 이미 만들어져 있습니다. 복구가 필요하면 **멱등 한 줄만** 쓰세요: `test -d {session_path}/project/.git || gh repo clone CrownClownCrowd/{repo} {session_path}/project` — `.git` 이 있으면 아무 일도 안 하고, **없으면** 이 명령이 자동 복구합니다. 이미 있는 디렉터리에 맨손으로 `gh repo clone` 을 다시 치면 실패해 루프에 빠지니, 반드시 이 멱등 형태(`test -d … ||`)로만 실행하세요.
 
 """
 
