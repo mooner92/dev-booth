@@ -1,0 +1,6 @@
+{
+  "title": "[Dev-Booth] 코드 퀄리티 개선 및 버그 수정",
+  "body": "## 변경사항\n- Supabase 테이블 직접 접근 관련 보안 취약점 해결\n- 의존성 취약점 수정 (Moderate 1개, Critical 1개)\n- 사용자 인증 시스템 강화\n\n## 테스트\n- 테스트 코드 없음",
+  "head": "CrownClownCrowd:feature/devbooth-qwen3-val4-0616-improvements",
+  "base": "main"
+}
